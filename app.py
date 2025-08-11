@@ -2,6 +2,11 @@ from config.BlockChain import blockchain
 from config.Database import connect_db, get_db_config
 import logging
 
+# To do list...
+# - [x] Conenectar banco de dados e BlockChain
+# - [] Verificar como integrar a API junto a blockchain, API, DB e BlockChain devem se comunica
+# - [] Iniciar o desenvolvimento da API
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def check_blockchain():

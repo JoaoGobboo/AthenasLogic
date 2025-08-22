@@ -16,9 +16,15 @@ class CheckAuthDTO(BaseModel):
 
     @validator("address")
     def validate_address(cls, v):
-        # Apenas valida se o endereço é um Ethereum válido
         if not Web3.is_address(v):
             raise ValueError("Endereço Ethereum inválido")
-        
-        # Converte para checksum
+        return Web3.to_checksum_address(v)
+
+class RequestNonceDTO(BaseModel):
+    address: str
+
+    @validator("address")
+    def validate_address(cls, v):
+        if not Web3.is_address(v):
+            raise ValueError("Endereço Ethereum inválido")
         return Web3.to_checksum_address(v)

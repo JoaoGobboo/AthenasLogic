@@ -1,47 +1,65 @@
 from flask import Blueprint, request, jsonify
+from dtos.auth_dto import CheckAuthDTO
 from web3 import Web3
+from dotenv import load_dotenv
+import random, string
+import os
+
+# Carrega variáveis do .env
+load_dotenv()
+INFURA_URL = os.getenv("INFURA_URL")
 
 auth_bp = Blueprint("auth", __name__)
-
-# Você pode manter um dicionário simples de nonces para cada usuário
 nonces = {}
 
+# Conexão com a blockchain via Alchemy/Infura
+web3 = Web3(Web3.HTTPProvider(INFURA_URL))
+
+# -----------------------------
+# Rota para gerar nonce
+# -----------------------------
 @auth_bp.route("/auth/request_nonce", methods=["POST"])
 def request_nonce():
-    data = request.json
-    address = data.get("address")
-    if not address:
-        return jsonify({"error": "Address is required"}), 400
+    try:
+        # Valida o JSON usando DTO parcial (apenas address)
+        dto = CheckAuthDTO(address=request.json.get("address"), signature="dummy")
+        address = dto.address
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
 
     # Gera um nonce aleatório
-    import random, string
     nonce = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
     nonces[address] = nonce
 
     return jsonify({"nonce": nonce})
 
 
+# -----------------------------
+# Rota para verificar assinatura
+# -----------------------------
 @auth_bp.route("/auth/verify", methods=["POST"])
 def verify_signature():
-    data = request.json
-    address = data.get("address")
-    signature = data.get("signature")
-    if not address or not signature:
-        return jsonify({"error": "Address and signature are required"}), 400
+    try:
+        # Valida JSON completo usando DTO
+        dto = CheckAuthDTO(**request.json)
+        address = dto.address
+        signature = dto.signature
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
 
+    # Recupera nonce
     message = nonces.get(address)
     if not message:
         return jsonify({"error": "No nonce found for this address"}), 400
 
-    web3 = Web3()
     try:
         recovered_address = web3.eth.account.recover_message(
             text=message,
             signature=signature
         )
-        if Web3.toChecksumAddress(recovered_address) == Web3.toChecksumAddress(address):
+        if Web3.to_checksum_address(recovered_address) == Web3.to_checksum_address(address):
             # Autenticado com sucesso
-            del nonces[address]  # opcional: remove nonce usado
+            del nonces[address]  # remove nonce usado
             return jsonify({"success": True, "address": address})
         else:
             return jsonify({"success": False, "error": "Invalid signature"}), 401

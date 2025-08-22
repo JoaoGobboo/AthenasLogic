@@ -17,7 +17,7 @@ def get_db_config():
     }
 
 @contextmanager
-def connect_db(config):
+def connect_db(config: dict):
     logging.info(f"Tentando conectar ao banco {config['database']} em {config['host']}:{config['port']} ...")
     conn = None
     try:
@@ -35,3 +35,11 @@ def connect_db(config):
         if conn and conn.is_connected():
             conn.close()
             logging.info("Conexão ao banco encerrada.")
+
+def get_tables(config: dict) -> list[str]:
+    with connect_db(config) as connection:
+        if not connection:
+            return []
+        with connection.cursor() as cursor:
+            cursor.execute("SHOW TABLES")
+            return [table[0] for table in cursor.fetchall()]

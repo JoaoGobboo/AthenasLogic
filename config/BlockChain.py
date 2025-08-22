@@ -4,16 +4,15 @@ import os
 
 load_dotenv()
 
-class Blockchain:
-    def __init__(self, provider_url):
-        self.web3 = Web3(Web3.HTTPProvider(provider_url))
+def connect_blockchain(provider_url: str) -> Web3:
+    return Web3(Web3.HTTPProvider(provider_url))
 
-    def is_connected(self):
-        return self.web3.is_connected()
+def is_blockchain_connected(web3: Web3) -> bool:
+    return web3.is_connected()
 
-    def get_latest_block(self):
-        return self.web3.eth.block_number
+def get_latest_block(web3: Web3) -> int:
+    return web3.eth.block_number
 
-# Instância singleton pronta para uso
-infura_url = os.getenv('INFURA_URL')
-blockchain = Blockchain(infura_url)
+# instância funcional "singleton"
+INFURA_URL = os.getenv("INFURA_URL")
+web3 = connect_blockchain(INFURA_URL)

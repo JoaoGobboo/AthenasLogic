@@ -2,3 +2,5 @@ flask
 mysql-connector-python
 web3
 python-dotenv
+flask-sqlalchemy
+flask-migrate

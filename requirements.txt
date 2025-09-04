@@ -2,7 +2,3 @@ flask
 mysql-connector-python
 web3
 python-dotenv
-pytest
-pytest-mock
-requests-mock
-sqlalchemy-utils

@@ -36,10 +36,20 @@ def connect_db(config: dict):
             conn.close()
             logging.info("Conexão ao banco encerrada.")
 
+def check_db_connection(config: dict) -> bool:
+    """Verifica se consegue conectar ao banco sem fazer query."""
+    with connect_db(config) as connection:
+        return connection is not None
+
 def get_tables(config: dict) -> list[str]:
+    """Retorna lista de tabelas do banco, ou lista vazia se falhar."""
     with connect_db(config) as connection:
         if not connection:
             return []
-        with connection.cursor() as cursor:
-            cursor.execute("SHOW TABLES")
-            return [table[0] for table in cursor.fetchall()]
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("SHOW TABLES")
+                return [table[0] for table in cursor.fetchall()]
+        except Error as e:
+            logging.error(f"Erro ao executar SHOW TABLES: {e}")
+            return []

@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify
 import time
 import logging
 from config.BlockChain import web3, is_blockchain_connected, get_latest_block
-from config.Database import get_db_config, get_tables
+from config.Database import get_db_config, check_db_connection  # use check_db_connection aqui
 
 health_bp = Blueprint('health', __name__)
 START_TIME = time.time()
@@ -21,11 +21,8 @@ def check_blockchain():
 def check_database():
     config = get_db_config()
     try:
-        tables = get_tables(config)
-        if tables:
+        if check_db_connection(config):  # só verifica conexão, não lista tabelas
             logging.info('✅ Banco conectado com sucesso!')
-            for table in tables:
-                logging.info(f"Tabela: {table}")
             return True
         else:
             logging.error('❌ Falha na conexão com banco')

@@ -1,0 +1,36 @@
+version: '3.9'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: flask_app
+    ports:
+      - "5000:5000"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DB_HOST=db
+      - DB_PORT=3306
+      - DB_NAME=meubanco
+      - DB_USER=usuario
+      - DB_PASSWORD=senha123
+    depends_on:
+      - db
+
+  db:
+    image: mysql:8.0  # <-- esta linha estava desalinhada
+    container_name: mysql_db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "8000:3306"  # Porta externa → interna
+    volumes:
+      - db_data:/var/lib/mysql
+
+volumes:
+  db_data:

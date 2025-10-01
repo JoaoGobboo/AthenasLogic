@@ -1,54 +1,43 @@
-from flask import Blueprint, jsonify
-import time
 import logging
-from config.BlockChain import web3, is_blockchain_connected, get_latest_block
-from config.Database import get_db_config, check_db_connection  # use check_db_connection aqui
+import time
 
-health_bp = Blueprint('health', __name__)
+from flask import Blueprint, jsonify
+
+from config.BlockChain import get_web3, get_latest_block, is_blockchain_connected
+from config.Database import check_db_connection, get_db_config
+from services.health_service import HealthLogEntry, build_health_response
+
+
+health_bp = Blueprint("health", __name__)
 START_TIME = time.time()
 VERSION = "1.0.0"
 
-def check_blockchain():
-    if is_blockchain_connected(web3):
-        latest_block = get_latest_block(web3)
-        logging.info('✅ Blockchain conectada')
-        logging.info(f'Último bloco: {latest_block}')
-        return True, latest_block
-    else:
-        logging.error('❌ Falha na conexão com blockchain')
-        return False, None
 
-def check_database():
-    config = get_db_config()
-    try:
-        if check_db_connection(config):  # só verifica conexão, não lista tabelas
-            logging.info('✅ Banco conectado com sucesso!')
-            return True
-        else:
-            logging.error('❌ Falha na conexão com banco')
-            return False
-    except Exception as e:
-        logging.error(f'❌ Erro na conexão com banco: {e}')
-        return False
+def _log_health_entries(entries: tuple[HealthLogEntry, ...]) -> None:
+    dispatch = {
+        "debug": logging.debug,
+        "info": logging.info,
+        "warning": logging.warning,
+        "error": logging.error,
+        "critical": logging.critical,
+    }
+    for entry in entries:
+        logger = dispatch.get(entry.level.lower(), logging.info)
+        logger(entry.message)
+
 
 @health_bp.route("/health", methods=["GET"])
-def healthcheck():
-    bc_status, latest_block = check_blockchain()
-    db_status = check_database()
+def healthcheck() -> tuple:
+    response = build_health_response(
+        start_time=START_TIME,
+        version=VERSION,
+        get_web3=get_web3,
+        blockchain_connected=is_blockchain_connected,
+        block_fetcher=get_latest_block,
+        get_db_config=get_db_config,
+        database_connected=check_db_connection,
+        now=time.time,
+    )
 
-    status_code = 200 if bc_status and db_status else 500
-    uptime = round(time.time() - START_TIME, 2)
-
-    return jsonify({
-        "blockchain": {
-            "connected": bc_status,
-            "latest_block": latest_block
-        },
-        "database": {
-            "connected": db_status
-        },
-        "service": {
-            "uptime_seconds": uptime,
-            "version": VERSION
-        }
-    }), status_code
+    _log_health_entries(response.logs)
+    return jsonify(response.payload), response.status_code

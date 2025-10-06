@@ -2,6 +2,7 @@ import logging
 import os
 
 from flask import Flask
+from flasgger import Swagger
 from sqlalchemy.exc import SQLAlchemyError
 
 from config.Database import build_sqlalchemy_uri
@@ -12,11 +13,38 @@ from routes.health import health_bp
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
+SWAGGER_TEMPLATE = {
+    "swagger": "2.0",
+    "info": {
+        "title": "Athenas Logic API",
+        "description": "API para autenticação via blockchain e operações eleitorais.",
+        "version": "1.0.0",
+    },
+    "schemes": ["http", "https"],
+    "basePath": "/",
+}
+
+SWAGGER_CONFIG = {
+    "headers": [],
+    "specs": [
+        {
+            "endpoint": "openapi",
+            "route": "/openapi.json",
+            "rule_filter": lambda rule: True,
+            "model_filter": lambda tag: True,
+        }
+    ],
+    "static_url_path": "/flasgger_static",
+    "swagger_ui": True,
+    "specs_route": "/swagger/",
+}
+
 
 def create_app() -> Flask:
     app = Flask(__name__)
 
     app.config.setdefault("SQLALCHEMY_TRACK_MODIFICATIONS", False)
+    app.config.setdefault("SWAGGER", {"title": "Athenas Logic API", "uiversion": 3})
 
     preconfigured_uri = app.config.get("SQLALCHEMY_DATABASE_URI") or os.getenv("SQLALCHEMY_DATABASE_URI")
     if preconfigured_uri:
@@ -25,6 +53,7 @@ def create_app() -> Flask:
         app.config["SQLALCHEMY_DATABASE_URI"] = build_sqlalchemy_uri()
 
     db.init_app(app)
+    Swagger(app, template=SWAGGER_TEMPLATE, config=SWAGGER_CONFIG)
 
     with app.app_context():
         try:

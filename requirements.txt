@@ -5,3 +5,4 @@ pydantic
 python-dotenv
 web3
 pytest
+flasgger

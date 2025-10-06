@@ -28,6 +28,41 @@ def _log_health_entries(entries: tuple[HealthLogEntry, ...]) -> None:
 
 @health_bp.route("/health", methods=["GET"])
 def healthcheck() -> tuple:
+    """Retorna o estado de saúde da aplicação.
+    ---
+    tags:
+      - Health
+    responses:
+      200:
+        description: Serviço saudável
+        schema:
+          type: object
+          properties:
+            blockchain:
+              type: object
+              properties:
+                connected:
+                  type: boolean
+                latest_block:
+                  type: integer
+                  format: int64
+                  x-nullable: true
+            database:
+              type: object
+              properties:
+                connected:
+                  type: boolean
+            service:
+              type: object
+              properties:
+                uptime_seconds:
+                  type: number
+                  format: float
+                version:
+                  type: string
+      500:
+        description: Dependências indisponíveis
+    """
     response = build_health_response(
         start_time=START_TIME,
         version=VERSION,

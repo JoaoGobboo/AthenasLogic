@@ -41,3 +41,17 @@ def test_logout_succeeds_after_request_nonce(client):
     response = client.post("/auth/logout", json={"address": address})
     assert response.status_code == 200
     assert response.json["success"] is True
+
+
+def test_swagger_ui_available(client):
+    response = client.get("/apidocs/")
+    assert response.status_code == 200
+    assert b"swagger" in response.data.lower()
+
+
+def test_openapi_spec_available(client):
+    response = client.get("/openapi.json")
+    assert response.status_code == 200
+    assert response.is_json
+    data = response.get_json()
+    assert data["info"]["title"] == "Athenas Logic API"

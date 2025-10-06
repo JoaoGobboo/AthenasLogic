@@ -34,6 +34,41 @@ def _apply_service_response(store: NonceStore, service_response: ServiceResponse
 
 @auth_bp.route("/auth/request_nonce", methods=["POST"])
 def request_nonce() -> tuple:
+    """Solicita um nonce temporário para autenticação.
+    ---
+    tags:
+      - Auth
+    consumes:
+      - application/json
+    parameters:
+      - in: body
+        name: payload
+        required: true
+        schema:
+          type: object
+          required:
+            - address
+          properties:
+            address:
+              type: string
+              description: Endereço Ethereum em formato checksum
+              example: 0x0000000000000000000000000000000000000000
+    responses:
+      200:
+        description: Nonce gerado com sucesso
+        schema:
+          type: object
+          properties:
+            nonce:
+              type: string
+      400:
+        description: Dados inválidos
+        schema:
+          type: object
+          properties:
+            error:
+              type: string
+    """
     payload = _extract_payload()
 
     try:
@@ -49,6 +84,56 @@ def request_nonce() -> tuple:
 
 @auth_bp.route("/auth/verify", methods=["POST"])
 def verify_signature() -> tuple:
+    """Valida a assinatura do nonce para autenticar o usuário.
+    ---
+    tags:
+      - Auth
+    consumes:
+      - application/json
+    parameters:
+      - in: body
+        name: payload
+        required: true
+        schema:
+          type: object
+          required:
+            - address
+            - signature
+          properties:
+            address:
+              type: string
+              description: Endereço Ethereum em formato checksum
+              example: 0x0000000000000000000000000000000000000000
+            signature:
+              type: string
+              description: Assinatura gerada pela carteira
+    responses:
+      200:
+        description: Assinatura validada com sucesso
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+            address:
+              type: string
+      400:
+        description: Assinatura inválida ou nonce inexistente
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+            error:
+              type: string
+      503:
+        description: Provedor blockchain indisponível
+        schema:
+          type: object
+          properties:
+            error:
+              type: string
+    """
     payload = _extract_payload()
 
     try:
@@ -74,6 +159,42 @@ def verify_signature() -> tuple:
 
 @auth_bp.route("/auth/logout", methods=["POST"])
 def logout() -> tuple:
+    """Remove o nonce associado ao endereço informado.
+    ---
+    tags:
+      - Auth
+    consumes:
+      - application/json
+    parameters:
+      - in: body
+        name: payload
+        required: true
+        schema:
+          type: object
+          properties:
+            address:
+              type: string
+              description: Endereço Ethereum associado ao nonce
+    responses:
+      200:
+        description: Logout realizado
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+            message:
+              type: string
+      400:
+        description: Endereço ausente ou inválido
+        schema:
+          type: object
+          properties:
+            success:
+              type: boolean
+            error:
+              type: string
+    """
     payload = _extract_payload()
     store = _get_nonce_store()
     state = store.snapshot()

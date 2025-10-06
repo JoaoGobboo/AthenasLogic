@@ -46,6 +46,12 @@ python app.py
 
 A aplicação ficará acessível em `http://localhost:5000`.
 
+### Documentação da API
+
+- UI interativa Swagger: `http://localhost:5000/apidocs/`
+- Especificação JSON: `http://localhost:5000/openapi.json`
+
+
 ### Docker Compose
 
 1. Garanta que o `.env` esteja configurado.

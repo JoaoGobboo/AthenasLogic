@@ -3,12 +3,31 @@ from __future__ import annotations
 import secrets
 import string
 from dataclasses import dataclass
+from threading import Lock
 from typing import Callable, Mapping
 
 from eth_account.messages import encode_defunct
 from web3 import Web3
 
 NonceState = Mapping[str, str]
+
+
+class NonceStore:
+    def __init__(self, initial_state: Mapping[str, str] | None = None) -> None:
+        self._lock = Lock()
+        self._state: dict[str, str] = dict(initial_state or {})
+
+    def snapshot(self) -> dict[str, str]:
+        with self._lock:
+            return dict(self._state)
+
+    def replace(self, state: Mapping[str, str]) -> None:
+        with self._lock:
+            self._state = dict(state)
+
+    def clear(self) -> None:
+        with self._lock:
+            self._state.clear()
 
 
 @dataclass(frozen=True)

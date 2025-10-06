@@ -1,29 +1,43 @@
-"""
-Testes reais dos endpoints disponíveis
-"""
 import pytest
 
-def test_health(client):
-    print("[TESTE] Testando endpoint /health")
-    resp = client.get('/health')
-    assert resp.status_code in [200, 500], "Status code deve ser 200 (ok) ou 500 (erro de serviço)"
-    assert 'blockchain' in resp.json, "Resposta deve conter chave 'blockchain'"
-    assert 'database' in resp.json, "Resposta deve conter chave 'database'"
-    assert 'service' in resp.json, "Resposta deve conter chave 'service'"
+from config import BlockChain
 
-# Teste do endpoint /auth/request_nonce
-# Usa um endereço Ethereum válido (pode ser qualquer string 0x... para teste)
-def test_request_nonce(client):
-    print("[TESTE] Testando endpoint /auth/request_nonce")
-    address = "0x0000000000000000000000000000000000000000"
-    resp = client.post('/auth/request_nonce', json={'address': address})
-    assert resp.status_code == 200, "Status code deve ser 200 para request_nonce"
-    assert 'nonce' in resp.json, "Resposta deve conter chave 'nonce'"
 
-# Teste do endpoint /auth/logout
-def test_logout(client):
-    print("[TESTE] Testando endpoint /auth/logout")
+@pytest.mark.usefixtures("client")
+def test_health_endpoint(client):
+    response = client.get("/health")
+    assert response.status_code in {200, 500}
+    assert set(response.json.keys()) == {"blockchain", "database", "service"}
+
+
+def test_request_nonce_endpoint_returns_nonce(client):
     address = "0x0000000000000000000000000000000000000000"
-    resp = client.post('/auth/logout', json={'address': address})
-    assert resp.status_code == 200, "Status code deve ser 200 para logout"
-    assert 'success' in resp.json, "Resposta deve conter chave 'success'"
+    response = client.post("/auth/request_nonce", json={"address": address})
+    assert response.status_code == 200
+    assert "nonce" in response.json
+
+
+def test_verify_without_blockchain_provider_returns_503(client, monkeypatch):
+    BlockChain.get_web3.cache_clear()
+    monkeypatch.setenv("INFURA_URL", "")
+    monkeypatch.setenv("WEB3_PROVIDER_URI", "")
+    response = client.post(
+        "/auth/verify",
+        json={"address": "0x0000000000000000000000000000000000000000", "signature": "0x1"},
+    )
+    assert response.status_code == 503
+    assert "error" in response.json
+
+
+def test_logout_requires_address(client):
+    response = client.post("/auth/logout", json={})
+    assert response.status_code == 400
+    assert response.json["success"] is False
+
+
+def test_logout_succeeds_after_request_nonce(client):
+    address = "0x0000000000000000000000000000000000000000"
+    client.post("/auth/request_nonce", json={"address": address})
+    response = client.post("/auth/logout", json={"address": address})
+    assert response.status_code == 200
+    assert response.json["success"] is True

@@ -1,4 +1,7 @@
 flask
+Flask-SQLAlchemy
 mysql-connector-python
-web3
+pydantic
 python-dotenv
+web3
+pytest

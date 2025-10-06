@@ -1,20 +1,25 @@
-# Athenas Logic API
+ï»¿# Athenas Logic API
 
-API Flask para autenticação via blockchain e operações eleitorais. O serviço expõe rotas de saúde e autenticação, integra com MySQL e Web3, e inclui suíte de testes com Pytest.
+API Flask para autenticaÃ§Ã£o via blockchain e operaÃ§Ãµes eleitorais. O serviÃ§o expÃµe rotas de saÃºde e autenticaÃ§Ã£o, integra com MySQL e Web3 e inclui suÃ­te de testes com Pytest.
 
-## Pré-requisitos
+## PrÃ©-requisitos
 
 - Python 3.11+
 - Docker e Docker Compose
-- Acesso a um endpoint Ethereum (Infura, Alchemy etc.) para funcionalidades que dependem da blockchain
+- Conta em provedor Ethereum (Infura, Alchemy, Ankr...) para acessar uma testnet
 
-## Variáveis de Ambiente
+## VariÃ¡veis de Ambiente
 
-Crie um arquivo `.env` na raiz com o mínimo necessário:
+Crie um arquivo `.env` na raiz com, no mÃ­nimo:
 
 ```env
 # Blockchain
-INFURA_URL=https://seu-endpoint-ethereum
+INFURA_URL=https://sepolia.infura.io/v3/<SUA_CHAVE>
+# Opcional: URL direta se nÃ£o quiser usar INFURA_URL
+WEB3_PROVIDER_URI=https://sepolia.infura.io/v3/<SUA_CHAVE>
+# ApÃ³s o deploy, preencha com o endereÃ§o do contrato e a chave privada do owner
+CONTRACT_ADDRESS=0x...
+CONTRACT_OWNER_PRIVATE_KEY=0x...
 
 # Banco de dados MySQL
 DB_HOST=db
@@ -24,9 +29,9 @@ DB_USER=usuario
 DB_PASSWORD=senha123
 ```
 
-> No modo Docker, `DB_HOST` deve apontar para o serviço `db` definido no `docker-compose.yml`.
+> AtenÃ§Ã£o: nunca compartilhe a chave privada real da sua carteira. Utilize uma conta exclusiva para testes.
 
-## Guia Rápido
+## Guia RÃ¡pido
 
 ### Ambiente Local
 
@@ -39,11 +44,11 @@ python -m pytest
 python app.py
 ```
 
-A aplicação estará acessível em `http://localhost:5000`.
+A aplicaÃ§Ã£o ficarÃ¡ acessÃ­vel em `http://localhost:5000`.
 
 ### Docker Compose
 
-1. Garanta que o `.env` esteja configurado (veja seção anterior).
+1. Garanta que o `.env` esteja configurado.
 2. Construa e suba a stack:
 
    ```bash
@@ -52,31 +57,67 @@ A aplicação estará acessível em `http://localhost:5000`.
 
    Use `-d` para executar em background (`docker compose up --build -d`).
 
-3. Para executar um comando isolado sem manter o container rodando (ex.: rodar testes e sair):
+3. Rodar comandos isolados (ex.: testes) sem manter o container ativo:
 
    ```bash
    docker compose run --rm app python -m pytest
    ```
 
-4. Para parar tudo e remover containers:
+4. Parar tudo e remover containers:
 
    ```bash
    docker compose down
    ```
 
-5. Para uma limpeza completa (inclui volumes do MySQL):
+5. Limpeza completa (remove volumes do MySQL):
 
    ```bash
    docker compose down -v
    ```
 
-6. Executar comandos dentro de um container já em execução (ex.: re-rodar testes):
+6. Executar comandos dentro de containers jÃ¡ em execuÃ§Ã£o:
 
    ```bash
    docker compose exec app python -m pytest
    ```
 
-## Comandos Úteis de Docker
+## Deploy do Contrato AthenaElection
+
+1. Configure o `.env` com `INFURA_URL` (ou `WEB3_PROVIDER_URI`).
+2. Gere/funde uma carteira de teste e exporte a chave privada para `DEPLOYER_PRIVATE_KEY`.
+3. Rode o script de deploy:
+
+   ```bash
+   python scripts/deploy_contract.py --name "Eleicao API" --candidates Alice Bob
+   ```
+
+   O script usa o artifact `contracts/AthenaElection.json`, envia a transaÃ§Ã£o e mostra o endereÃ§o implantado.
+4. Salve o endereÃ§o retornado em `CONTRACT_ADDRESS` e reutilize a mesma chave como `CONTRACT_OWNER_PRIVATE_KEY` na API.
+
+> Se preferir, o deploy pode ser feito manualmente no Remix seguindo o guia em `contracts/README.md`.
+
+## IntegraÃ§Ã£o Blockchain na API
+
+- Ao criar uma eleiÃ§Ã£o (`POST /api/eleicoes`), informe candidatos opcionais:
+
+  ```json
+  {
+    "titulo": "Eleicao do Conselho",
+    "descricao": "Mandato 2026",
+    "data_inicio": "2025-10-10T09:00:00",
+    "data_fim": "2025-10-20T18:00:00",
+    "candidatos": ["Alice", "Bob"]
+  }
+  ```
+
+- Se `CONTRACT_ADDRESS` e `CONTRACT_OWNER_PRIVATE_KEY` estiverem configurados, a API:
+  - Chama `configureElection` na criaÃ§Ã£o (sincronizando nome/candidatos).
+  - Chama `openElection` ao iniciar (`POST /api/eleicoes/{id}/start`).
+  - Chama `closeElection` ao encerrar (`POST /api/eleicoes/{id}/end`).
+  - A resposta inclui `blockchain_tx` com o hash da transaÃ§Ã£o quando disponÃ­vel.
+- Sem essas variÃ¡veis, a API continua funcionando apenas com o banco de dados.
+
+## Comandos Ãšteis de Docker
 
 - Reconstruir apenas a imagem da API:
 
@@ -90,7 +131,7 @@ A aplicação estará acessível em `http://localhost:5000`.
   docker compose logs -f app
   ```
 
-- Recriar apenas o serviço de banco de dados:
+- Recriar apenas o serviÃ§o de banco de dados:
 
   ```bash
   docker compose up --build db
@@ -99,28 +140,31 @@ A aplicação estará acessível em `http://localhost:5000`.
 ## Estrutura do Projeto
 
 - `app.py`: ponto de entrada Flask
-- `routes/`: blueprints agrupados por domínio (`auth`, `health`)
-- `services/`: regras de negócio desacopladas das rotas
-- `config/`: conectores de banco e blockchain
+- `routes/`: blueprints agrupados por domÃ­nio (`auth`, `health`, `elections`)
+- `services/`: regras de negÃ³cio (autenticaÃ§Ã£o, healthcheck, eleiÃ§Ãµes, integraÃ§Ã£o blockchain)
+- `config/`: conectores de banco e Web3
 - `models/`: modelos SQLAlchemy
-- `tests/`: suíte Pytest
-- `contracts/`: artefatos do smart contract AthenaElection
+- `contracts/`: contrato AthenaElection (sol, JSON, README)
+- `scripts/`: utilitÃ¡rios (deploy do contrato)
+- `tests/`: suÃ­te Pytest
+
 ## Troubleshooting
 
-- **`RuntimeError: No blockchain provider configured`**: verifique se `INFURA_URL` (ou `WEB3_PROVIDER_URI`) está definido no `.env`.
-- **Falha ao conectar no banco**: confirme credenciais e disponibilidade do serviço MySQL. Em Docker, execute `docker compose logs db`.
-- **Tabelas ausentes (erro 1146)**: execute `docker compose exec app python -c "from app import app, db; from models import *; with app.app_context(): db.create_all()"` para recriar as tabelas.
+- **`RuntimeError: No blockchain provider configured`**: verifique `INFURA_URL` ou `WEB3_PROVIDER_URI`.
+- **Falha ao conectar no banco**: confira credenciais/porta e use `docker compose logs db`.
+- **Tabelas ausentes (erro 1146)**: execute `docker compose exec app python -c "from app import app, db; from models import *; with app.app_context(): db.create_all()"`.
+- **TransaÃ§Ã£o revertida**: confira se a carteira tem saldo e se vocÃª Ã© o owner do contrato.
 
 ## Endpoints Principais
 
-- `GET /health`: status do serviço, blockchain e banco.
-- `POST /auth/request_nonce`: solicita nonce de autenticação.
-- `POST /auth/verify`: verifica assinatura e conclui login.
-- `POST /auth/logout`: encerra sessão.
-- `POST /api/eleicoes`: cria nova eleição.
-- `GET /api/eleicoes`: lista eleições.
-- `GET /api/eleicoes/{id}`: detalhes de uma eleição.
-- `PUT /api/eleicoes/{id}`: atualiza eleição.
-- `DELETE /api/eleicoes/{id}`: remove eleição.
-- `POST /api/eleicoes/{id}/start`: inicia eleição.
-- `POST /api/eleicoes/{id}/end`: encerra eleição.
+- `GET /health`
+- `POST /auth/request_nonce`
+- `POST /auth/verify`
+- `POST /auth/logout`
+- `POST /api/eleicoes`
+- `GET /api/eleicoes`
+- `GET /api/eleicoes/{id}`
+- `PUT /api/eleicoes/{id}`
+- `DELETE /api/eleicoes/{id}`
+- `POST /api/eleicoes/{id}/start`
+- `POST /api/eleicoes/{id}/end`

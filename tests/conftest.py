@@ -1,4 +1,4 @@
-import os
+﻿import os
 import sys
 
 import pytest
@@ -14,7 +14,7 @@ from models import db
 
 @pytest.fixture(scope="session", autouse=True)
 def configure_database():
-    for key in ("DB_HOST", "DB_USER", "DB_PASSWORD", "DB_NAME", "DB_PORT"):
+    for key in ("DB_HOST", "DB_USER", "DB_PASSWORD", "DB_NAME", "DB_PORT", "CONTRACT_ADDRESS", "CONTRACT_OWNER_PRIVATE_KEY"):
         os.environ.pop(key, None)
     app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite://"
     app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {

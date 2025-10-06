@@ -1,4 +1,4 @@
-from datetime import datetime
+﻿from datetime import datetime
 from typing import Optional
 
 from pydantic import BaseModel, Field, field_validator
@@ -9,7 +9,8 @@ class CreateElectionDTO(BaseModel):
     descricao: Optional[str] = None
     data_inicio: datetime
     data_fim: datetime
-    ativa: bool | None = None
+    ativa: Optional[bool] = None
+    candidatos: Optional[list[str]] = None
 
     @field_validator("data_fim")
     @classmethod
@@ -19,6 +20,16 @@ class CreateElectionDTO(BaseModel):
             raise ValueError("data_fim must be after data_inicio")
         return value
 
+    @field_validator("candidatos")
+    @classmethod
+    def validate_candidates(cls, value: Optional[list[str]]):
+        if value is None:
+            return value
+        cleaned = [candidate.strip() for candidate in value if candidate and candidate.strip()]
+        if not cleaned:
+            return None
+        return cleaned
+
 
 class UpdateElectionDTO(BaseModel):
     titulo: Optional[str] = Field(None, min_length=1, max_length=255)
@@ -26,6 +37,7 @@ class UpdateElectionDTO(BaseModel):
     data_inicio: Optional[datetime] = None
     data_fim: Optional[datetime] = None
     ativa: Optional[bool] = None
+    candidatos: Optional[list[str]] = None
 
     @field_validator("data_fim")
     @classmethod
@@ -36,3 +48,13 @@ class UpdateElectionDTO(BaseModel):
         if data_inicio and value <= data_inicio:
             raise ValueError("data_fim must be after data_inicio")
         return value
+
+    @field_validator("candidatos")
+    @classmethod
+    def validate_candidates(cls, value: Optional[list[str]]):
+        if value is None:
+            return value
+        cleaned = [candidate.strip() for candidate in value if candidate and candidate.strip()]
+        if not cleaned:
+            return None
+        return cleaned

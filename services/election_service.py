@@ -1,5 +1,6 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
+import logging
 from datetime import datetime
 from typing import Iterable
 
@@ -7,10 +8,36 @@ from flask import abort
 
 from dtos.election_dto import CreateElectionDTO, UpdateElectionDTO
 from models import Eleicao, db
+from services.blockchain_integration import (
+    close_election_onchain,
+    configure_election_onchain,
+    is_blockchain_enabled,
+    open_election_onchain,
+)
 
 
 def _serialize_datetime(value: datetime | None) -> str | None:
     return value.isoformat() if value else None
+
+
+def _attach_receipt(payload: dict, receipt_hash: str | None) -> dict:
+    if receipt_hash:
+        payload = dict(payload)
+        payload["blockchain_tx"] = receipt_hash
+    return payload
+
+
+def _sync_blockchain(action: str, callback, *args) -> str | None:
+    if not is_blockchain_enabled():
+        return None
+    try:
+        receipt = callback(*args)
+    except Exception as exc:  # pragma: no cover - surfaced via API response
+        logging.error("Blockchain sync failed during %s: %s", action, exc)
+        abort(502, description=f"Blockchain sync failed during {action}: {exc}")
+    if receipt is None:
+        return None
+    return receipt.transactionHash.hex()
 
 
 def serialize_election(election: Eleicao) -> dict:
@@ -34,7 +61,14 @@ def create_election(dto: CreateElectionDTO) -> dict:
     )
     db.session.add(election)
     db.session.commit()
-    return serialize_election(election)
+
+    receipt_hash = _sync_blockchain(
+        "configure_election",
+        configure_election_onchain,
+        dto.titulo,
+        dto.candidatos or [],
+    )
+    return _attach_receipt(serialize_election(election), receipt_hash)
 
 
 def list_elections() -> list[dict]:
@@ -88,7 +122,9 @@ def start_election(election_id: int) -> dict:
     election.data_inicio = now
     election.ativa = True
     db.session.commit()
-    return serialize_election(election)
+
+    receipt_hash = _sync_blockchain("open_election", open_election_onchain)
+    return _attach_receipt(serialize_election(election), receipt_hash)
 
 
 def end_election(election_id: int) -> dict:
@@ -104,4 +140,6 @@ def end_election(election_id: int) -> dict:
     election.data_fim = now
     election.ativa = False
     db.session.commit()
-    return serialize_election(election)
+
+    receipt_hash = _sync_blockchain("close_election", close_election_onchain)
+    return _attach_receipt(serialize_election(election), receipt_hash)

@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+﻿from datetime import datetime, timedelta
 
 import pytest
 
@@ -10,6 +10,7 @@ def _build_payload(offset_days: int = 1) -> dict:
         "descricao": "Eleicao para testes automatizados",
         "data_inicio": now.isoformat(),
         "data_fim": (now + timedelta(days=offset_days)).isoformat(),
+        "candidatos": ["Alice", "Bob"],
     }
 
 
@@ -27,6 +28,7 @@ def test_create_election_returns_created_election(client):
     assert body["id"] > 0
     assert body["ativa"] is False
     assert body["titulo"] == "Eleicao de Teste"
+    assert "blockchain_tx" not in body
 
 
 def test_list_elections_returns_all(client):
@@ -65,6 +67,7 @@ def test_start_election_sets_active_status(client):
     assert response.status_code == 200
     assert response.json["ativa"] is True
     assert response.json["data_inicio"] is not None
+    assert "blockchain_tx" not in response.json
 
 
 def test_end_election_sets_inactive_status(client):
@@ -73,6 +76,7 @@ def test_end_election_sets_inactive_status(client):
     response = client.post(f"/api/eleicoes/{election['id']}/end")
     assert response.status_code == 200
     assert response.json["ativa"] is False
+    assert "blockchain_tx" not in response.json
 
 
 def test_delete_election_removes_resource(client):
@@ -91,6 +95,7 @@ def test_create_election_rejects_invalid_dates(client):
         "descricao": "Datas inconsistentes",
         "data_inicio": now.isoformat(),
         "data_fim": (now - timedelta(days=1)).isoformat(),
+        "candidatos": ["Alice"],
     }
     response = client.post("/api/eleicoes", json=payload)
     assert response.status_code == 400

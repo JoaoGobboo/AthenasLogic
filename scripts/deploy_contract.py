@@ -105,7 +105,12 @@ def main() -> None:
     )
 
     signed_txn = account.sign_transaction(txn)
-    tx_hash = web3.eth.send_raw_transaction(signed_txn.rawTransaction)
+    # web3>=7 renames rawTransaction -> raw_transaction; keep compatibility with both
+    if hasattr(signed_txn, "raw_transaction"):
+        raw_tx = signed_txn.raw_transaction
+    else:  # pragma: no cover - compatibility with older web3
+        raw_tx = signed_txn.rawTransaction
+    tx_hash = web3.eth.send_raw_transaction(raw_tx)
     print(f"Deployment transaction sent: {tx_hash.hex()}")
 
     if args.no_wait:

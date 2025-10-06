@@ -1,16 +1,16 @@
-ï»¿# Athenas Logic API
+# Athenas Logic API
 
-API Flask para autenticaÃ§Ã£o via blockchain e operaÃ§Ãµes eleitorais. O serviÃ§o expÃµe rotas de saÃºde e autenticaÃ§Ã£o, integra com MySQL e Web3, e inclui suÃ­te de testes com Pytest.
+API Flask para autenticação via blockchain e operações eleitorais. O serviço expõe rotas de saúde e autenticação, integra com MySQL e Web3, e inclui suíte de testes com Pytest.
 
-## PrÃ©-requisitos
+## Pré-requisitos
 
 - Python 3.11+
 - Docker e Docker Compose
 - Acesso a um endpoint Ethereum (Infura, Alchemy etc.) para funcionalidades que dependem da blockchain
 
-## VariÃ¡veis de Ambiente
+## Variáveis de Ambiente
 
-Crie um arquivo `.env` na raiz com o mÃ­nimo necessÃ¡rio:
+Crie um arquivo `.env` na raiz com o mínimo necessário:
 
 ```env
 # Blockchain
@@ -24,9 +24,9 @@ DB_USER=usuario
 DB_PASSWORD=senha123
 ```
 
-> No modo Docker, `DB_HOST` deve apontar para o serviÃ§o `db` definido no `docker-compose.yml`.
+> No modo Docker, `DB_HOST` deve apontar para o serviço `db` definido no `docker-compose.yml`.
 
-## Guia RÃ¡pido
+## Guia Rápido
 
 ### Ambiente Local
 
@@ -39,11 +39,11 @@ python -m pytest
 python app.py
 ```
 
-A aplicaÃ§Ã£o estarÃ¡ acessÃ­vel em `http://localhost:5000`.
+A aplicação estará acessível em `http://localhost:5000`.
 
 ### Docker Compose
 
-1. Garanta que o `.env` esteja configurado (veja seÃ§Ã£o anterior).
+1. Garanta que o `.env` esteja configurado (veja seção anterior).
 2. Construa e suba a stack:
 
    ```bash
@@ -70,13 +70,13 @@ A aplicaÃ§Ã£o estarÃ¡ acessÃ­vel em `http://localhost:5000`.
    docker compose down -v
    ```
 
-6. Executar comandos dentro de um container jÃ¡ em execuÃ§Ã£o (ex.: re-rodar testes):
+6. Executar comandos dentro de um container já em execução (ex.: re-rodar testes):
 
    ```bash
    docker compose exec app python -m pytest
    ```
 
-## Comandos Ãšteis de Docker
+## Comandos Úteis de Docker
 
 - Reconstruir apenas a imagem da API:
 
@@ -90,7 +90,7 @@ A aplicaÃ§Ã£o estarÃ¡ acessÃ­vel em `http://localhost:5000`.
   docker compose logs -f app
   ```
 
-- Recriar apenas o serviÃ§o de banco de dados:
+- Recriar apenas o serviço de banco de dados:
 
   ```bash
   docker compose up --build db
@@ -99,14 +99,28 @@ A aplicaÃ§Ã£o estarÃ¡ acessÃ­vel em `http://localhost:5000`.
 ## Estrutura do Projeto
 
 - `app.py`: ponto de entrada Flask
-- `routes/`: blueprints agrupados por domÃ­nio (`auth`, `health`)
-- `services/`: regras de negÃ³cio desacopladas das rotas
+- `routes/`: blueprints agrupados por domínio (`auth`, `health`)
+- `services/`: regras de negócio desacopladas das rotas
 - `config/`: conectores de banco e blockchain
 - `models/`: modelos SQLAlchemy
-- `tests/`: suÃ­te Pytest
+- `tests/`: suíte Pytest
 - `contracts/`: artefatos do smart contract AthenaElection
-
 ## Troubleshooting
 
-- **`RuntimeError: No blockchain provider configured`**: verifique se `INFURA_URL` (ou `WEB3_PROVIDER_URI`) estÃ¡ definido no `.env`.
-- **Falha ao conectar no banco**: confirme credenciais e disponibilidade do serviÃ§o MySQL. Em Docker, execute `docker compose logs db`.
+- **`RuntimeError: No blockchain provider configured`**: verifique se `INFURA_URL` (ou `WEB3_PROVIDER_URI`) está definido no `.env`.
+- **Falha ao conectar no banco**: confirme credenciais e disponibilidade do serviço MySQL. Em Docker, execute `docker compose logs db`.
+- **Tabelas ausentes (erro 1146)**: execute `docker compose exec app python -c "from app import app, db; from models import *; with app.app_context(): db.create_all()"` para recriar as tabelas.
+
+## Endpoints Principais
+
+- `GET /health`: status do serviço, blockchain e banco.
+- `POST /auth/request_nonce`: solicita nonce de autenticação.
+- `POST /auth/verify`: verifica assinatura e conclui login.
+- `POST /auth/logout`: encerra sessão.
+- `POST /api/eleicoes`: cria nova eleição.
+- `GET /api/eleicoes`: lista eleições.
+- `GET /api/eleicoes/{id}`: detalhes de uma eleição.
+- `PUT /api/eleicoes/{id}`: atualiza eleição.
+- `DELETE /api/eleicoes/{id}`: remove eleição.
+- `POST /api/eleicoes/{id}/start`: inicia eleição.
+- `POST /api/eleicoes/{id}/end`: encerra eleição.

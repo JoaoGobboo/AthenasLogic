@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 import logging
@@ -128,5 +128,15 @@ def close_election_onchain() -> Optional[TxReceipt]:
 
     def builder(contract: Contract):
         return contract.functions.closeElection()
+
+    return _send_transaction(builder)
+
+
+def add_candidate_onchain(name: str) -> Optional[TxReceipt]:
+    if not is_blockchain_enabled():
+        return None
+
+    def builder(contract: Contract):
+        return contract.functions.addCandidate(name)
 
     return _send_transaction(builder)

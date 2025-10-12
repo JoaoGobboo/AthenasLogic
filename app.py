@@ -8,6 +8,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from config.Database import build_sqlalchemy_uri
 from models import db
 from routes.auth import auth_bp
+from routes.candidates import candidates_bp
 from routes.elections import elections_bp
 from routes.health import health_bp
 
@@ -64,6 +65,7 @@ def create_app() -> Flask:
     app.register_blueprint(health_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(elections_bp)
+    app.register_blueprint(candidates_bp)
 
     @app.teardown_appcontext
     def shutdown_session(exception: Exception | None = None) -> None:

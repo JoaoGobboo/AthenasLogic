@@ -1,17 +1,24 @@
 import logging
 import os
 
-from flask import Flask, jsonify
+from flask import Flask, jsonify, redirect
 from flasgger import Swagger
 from sqlalchemy.exc import SQLAlchemyError
 from werkzeug.exceptions import HTTPException
 
 from config.Database import build_sqlalchemy_uri
 from models import db
+
+# Importações de rotas existentes
 from routes.auth import auth_bp
 from routes.candidates import candidates_bp
 from routes.elections import elections_bp
 from routes.health import health_bp
+
+# <<< NOVAS IMPORTAÇÕES DE ROTAS AQUI >>>
+from routes.audit import audit_bp
+from routes.blockchain import blockchain_bp
+
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
@@ -63,6 +70,7 @@ def create_app() -> Flask:
         except SQLAlchemyError as exc:  # pragma: no cover - defensive log for prod visibility
             logging.error("Failed to create database tables: %s", exc)
 
+    # Registro dos blueprints existentes
     app.register_blueprint(health_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(elections_bp)
@@ -74,6 +82,14 @@ def create_app() -> Flask:
         response = jsonify({"description": description})
         response.status_code = exc.code or 500
         return response
+
+    # <<< REGISTRO DOS NOVOS BLUEPRINTS AQUI >>>
+    app.register_blueprint(audit_bp)
+    app.register_blueprint(blockchain_bp)
+
+    @app.route("/swagger/")
+    def swagger_alias():
+        return redirect("/apidocs/", code=302)
 
     @app.teardown_appcontext
     def shutdown_session(exception: Exception | None = None) -> None:

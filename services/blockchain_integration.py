@@ -34,7 +34,7 @@ def _load_artifact() -> dict:
         path = _DEFAULT_ARTIFACT
     try:
         return json.loads(path.read_text(encoding="utf-8"))
-    except FileNotFoundError as exc:  # pragma: no cover - defensive guard
+    except FileNotFoundError as exc:  # pragma: no cover - defensive guard.
         raise RuntimeError(f"Contract artifact not found at {path}") from exc
 
 
@@ -49,7 +49,14 @@ def _load_config() -> Optional[BlockchainConfig]:
     if not abi:
         raise RuntimeError("Contract ABI not found in artifact")
 
-    checksum_address = Web3.to_checksum_address(address)
+    try:
+        checksum_address = Web3.to_checksum_address(address)
+    except (TypeError, ValueError) as exc:
+        logging.warning(
+            "Invalid CONTRACT_ADDRESS provided; disabling blockchain features. error=%s",
+            exc,
+        )
+        return None
     return BlockchainConfig(address=checksum_address, private_key=private_key, abi=abi)
 
 
@@ -131,7 +138,6 @@ def close_election_onchain() -> Optional[TxReceipt]:
 
     return _send_transaction(builder)
 
-
 def add_candidate_onchain(name: str) -> Optional[TxReceipt]:
     if not is_blockchain_enabled():
         return None
@@ -140,3 +146,27 @@ def add_candidate_onchain(name: str) -> Optional[TxReceipt]:
         return contract.functions.addCandidate(name)
 
     return _send_transaction(builder)
+
+
+def verify_transaction_on_chain(tx_hash: str) -> dict:
+    """Consulta o status de uma transacao na blockchain."""
+    if not is_blockchain_enabled():
+        return {"verified": False, "status": "error", "message": "Blockchain nao esta configurada."}
+
+    try:
+        web3 = get_web3()
+        receipt = web3.eth.get_transaction_receipt(tx_hash)
+
+        if receipt:
+            return {
+                "verified": True,
+                "status": "success" if receipt.get("status") == 1 else "failed",
+                "blockNumber": receipt.get("blockNumber"),
+                "gasUsed": receipt.get("gasUsed"),
+                "transactionHash": web3.to_hex(receipt.get("transactionHash")),
+            }
+        return {"verified": False, "status": "not_found", "message": "Transacao nao encontrada ou pendente."}
+
+    except Exception as exc:  # pragma: no cover - defensive fallback
+        logging.error("Erro ao verificar hash '%s' na blockchain: %s", tx_hash, exc)
+        return {"verified": False, "status": "error", "message": f"Erro ao processar o hash: {exc}"}

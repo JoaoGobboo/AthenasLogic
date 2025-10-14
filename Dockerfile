@@ -19,5 +19,6 @@ ENV PYTHONUNBUFFERED=1
 # Expõe a porta que o Flask usa
 EXPOSE 5000
 
-# Comando para rodar o Flask
-CMD ["python", "app.py"]
+# --- CORREÇÃO AQUI ---
+# Comando para rodar o Flask como um módulo, respeitando FLASK_APP e PYTHONPATH
+CMD ["flask", "run", "--host=0.0.0.0"]

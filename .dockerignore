@@ -1,0 +1,14 @@
+# Cache do Python
+__pycache__/
+*.pyc
+
+# Ambiente virtual
+venv/
+.venv/
+
+# Arquivos do Git
+.git
+.gitignore
+
+# Arquivos de configuração local que não devem entrar na imagem
+.env

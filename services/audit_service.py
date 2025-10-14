@@ -1,7 +1,8 @@
 # services/audit_service.py
 
-from ..models.audit_log import AuditLog
-from ..models.eleicao import Eleicao # Supondo que você tenha um modelo Eleicao
+# CORREÇÃO: Importações absolutas a partir da raiz do projeto (/app)
+from models.audit_log import AuditLog
+from models.eleicao import Eleicao # Supondo que você tenha um modelo Eleicao
 from sqlalchemy import desc
 
 class AuditService:

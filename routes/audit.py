@@ -1,7 +1,8 @@
 # routes/audit.py
 
 from flask import Blueprint, jsonify
-from ..services.audit_service import AuditService
+# CORREÇÃO: Importação absoluta a partir da raiz do projeto (/app)
+from services.audit_service import AuditService
 
 audit_bp = Blueprint('audit_bp', __name__, url_prefix='/api/audit')
 
@@ -12,7 +13,7 @@ def get_audit_logs():
     if logs is None:
         return jsonify({"error": "Falha ao buscar logs de auditoria"}), 500
         
-    # Serializando os objetos para JSON!
+    # Serializando os objetos para JSON
     logs_data = [
         {
             "id": log.id,

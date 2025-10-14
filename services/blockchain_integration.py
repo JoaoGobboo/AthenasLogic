@@ -49,7 +49,14 @@ def _load_config() -> Optional[BlockchainConfig]:
     if not abi:
         raise RuntimeError("Contract ABI not found in artifact")
 
-    checksum_address = Web3.to_checksum_address(address)
+    try:
+        checksum_address = Web3.to_checksum_address(address)
+    except (TypeError, ValueError) as exc:
+        logging.warning(
+            "Invalid CONTRACT_ADDRESS provided; disabling blockchain features. error=%s",
+            exc,
+        )
+        return None
     return BlockchainConfig(address=checksum_address, private_key=private_key, abi=abi)
 
 

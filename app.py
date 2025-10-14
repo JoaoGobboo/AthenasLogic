@@ -1,7 +1,7 @@
 import logging
 import os
 
-from flask import Flask
+from flask import Flask, redirect
 from flasgger import Swagger
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -43,7 +43,7 @@ SWAGGER_CONFIG = {
     ],
     "static_url_path": "/flasgger_static",
     "swagger_ui": True,
-    "specs_route": "/swagger/",
+    "specs_route": "/apidocs/",
 }
 
 
@@ -76,6 +76,10 @@ def create_app() -> Flask:
     # <<< REGISTRO DOS NOVOS BLUEPRINTS AQUI >>>
     app.register_blueprint(audit_bp)
     app.register_blueprint(blockchain_bp)
+
+    @app.route("/swagger/")
+    def swagger_alias():
+        return redirect("/apidocs/", code=302)
 
     @app.teardown_appcontext
     def shutdown_session(exception: Exception | None = None) -> None:

@@ -34,7 +34,7 @@ def _load_artifact() -> dict:
         path = _DEFAULT_ARTIFACT
     try:
         return json.loads(path.read_text(encoding="utf-8"))
-    except FileNotFoundError as exc:  # pragma: no cover - defensive guard
+    except FileNotFoundError as exc:  # pragma: no cover - defensive guard.
         raise RuntimeError(f"Contract artifact not found at {path}") from exc
 
 
@@ -130,3 +130,38 @@ def close_election_onchain() -> Optional[TxReceipt]:
         return contract.functions.closeElection()
 
     return _send_transaction(builder)
+
+# <<< NOVA FUNÇÃO ADICIONADA AQUI >>>
+# ==============================================================================
+
+def verify_transaction_on_chain(tx_hash: str) -> dict:
+    """
+    Verifica o status e os detalhes de uma transação na blockchain a partir de seu hash.
+    Esta é uma operação de LEITURA e não envia uma nova transação.
+    """
+    if not is_blockchain_enabled():
+        return {"verified": False, "status": "error", "message": "Blockchain não está configurada."}
+
+    try:
+        web3 = get_web3()
+        
+        # O método get_transaction_receipt espera um HexBytes
+        receipt = web3.eth.get_transaction_receipt(tx_hash)
+
+        if receipt:
+            # A transação foi encontrada e minerada
+            return {
+                "verified": True,
+                "status": "success" if receipt.get("status") == 1 else "failed",
+                "blockNumber": receipt.get("blockNumber"),
+                "gasUsed": receipt.get("gasUsed"),
+                "transactionHash": web3.to_hex(receipt.get("transactionHash"))
+            }
+        else:
+            # A transação não foi encontrada, pode não ter sido minerada ainda
+            return {"verified": False, "status": "not_found", "message": "Transação não encontrada ou ainda pendente."}
+
+    except Exception as e:
+        # Captura erros comuns, como um formato de hash inválido
+        logging.error(f"Erro ao verificar o hash '{tx_hash}' na blockchain: {e}")
+        return {"verified": False, "status": "error", "message": f"Erro ao processar o hash: {e}"}

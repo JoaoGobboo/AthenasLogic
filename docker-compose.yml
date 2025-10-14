@@ -2,26 +2,30 @@ version: '3.9'
 
 services:
   app:
-    build:
+    build: 
       context: .
       dockerfile: Dockerfile
     container_name: flask_app
     ports:
       - "5000:5000"
+    env_file: # <<< ADICIONADO para carregar chaves do .env
+      - .env
     environment:
       - FLASK_APP=app.py
       - PYTHONPATH=/app 
       - PYTHONUNBUFFERED=1
+      # As credenciais do DB agora vêm do `env_file`, mas podemos mantê-las aqui como fallback
       - DB_HOST=db
       - DB_PORT=3306
       - DB_NAME=meubanco
       - DB_USER=usuario
       - DB_PASSWORD=senha123
     depends_on:
-      - db
+      db: # <<< CONDIÇÃO DE SAÚDE ADICIONADA
+        condition: service_healthy
 
   db:
-    image: mysql:8.0  # <-- esta linha estava desalinhada
+    image: mysql:8.0
     container_name: mysql_db
     restart: always
     environment:
@@ -30,9 +34,14 @@ services:
       MYSQL_USER: ${DB_USER}
       MYSQL_PASSWORD: ${DB_PASSWORD}
     ports:
-      - "8000:3306"  # Porta externa → interna
+      - "8000:3306"
     volumes:
       - db_data:/var/lib/mysql
+    healthcheck: # <<< BLOCO DE HEALTHCHECK ADICIONADO
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
 
 volumes:
   db_data:
+

@@ -1,9 +1,10 @@
 import logging
 import os
 
-from flask import Flask
+from flask import Flask, jsonify
 from flasgger import Swagger
 from sqlalchemy.exc import SQLAlchemyError
+from werkzeug.exceptions import HTTPException
 
 from config.Database import build_sqlalchemy_uri
 from models import db
@@ -18,7 +19,7 @@ SWAGGER_TEMPLATE = {
     "swagger": "2.0",
     "info": {
         "title": "Athenas Logic API",
-        "description": "API para autenticação via blockchain e operações eleitorais.",
+        "description": "API para autenticaÃ§Ã£o via blockchain e operaÃ§Ãµes eleitorais.",
         "version": "1.0.0",
     },
     "schemes": ["http", "https"],
@@ -37,7 +38,7 @@ SWAGGER_CONFIG = {
     ],
     "static_url_path": "/flasgger_static",
     "swagger_ui": True,
-    "specs_route": "/swagger/",
+    "specs_route": "/apidocs/",
 }
 
 
@@ -66,6 +67,13 @@ def create_app() -> Flask:
     app.register_blueprint(auth_bp)
     app.register_blueprint(elections_bp)
     app.register_blueprint(candidates_bp)
+
+    @app.errorhandler(HTTPException)
+    def handle_http_exception(exc: HTTPException):
+        description = exc.description or exc.name
+        response = jsonify({"description": description})
+        response.status_code = exc.code or 500
+        return response
 
     @app.teardown_appcontext
     def shutdown_session(exception: Exception | None = None) -> None:

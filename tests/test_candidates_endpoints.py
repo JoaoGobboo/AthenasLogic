@@ -1,10 +1,16 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+import uuid
 
 import pytest
+from models import Candidato, Voto, db
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 def _build_election_payload(offset_days: int = 1) -> dict:
-    now = datetime.utcnow()
+    now = _utc_now()
     return {
         "titulo": "Eleicao de Teste",
         "descricao": "Eleicao para testes automatizados",
@@ -195,3 +201,43 @@ def test_candidates_isolated_between_elections(client):
     assert len(response2.json) == 1
     assert response1.json[0]["nome"] == "Alice"
     assert response2.json[0]["nome"] == "Charlie"
+
+
+def test_create_candidate_rolls_back_on_blockchain_failure(client, monkeypatch):
+    election = _create_election(client)
+
+    monkeypatch.setattr("services.candidate_service.is_blockchain_enabled", lambda: True)
+
+    def failing_add_candidate(_name: str):
+        raise RuntimeError("rpc unavailable")
+
+    monkeypatch.setattr("services.candidate_service.add_candidate_onchain", failing_add_candidate)
+
+    response = client.post(f"/api/eleicoes/{election['id']}/candidatos", json={"nome": "Alice"})
+
+    assert response.status_code == 502
+
+    with client.application.app_context():
+        assert Candidato.query.count() == 0
+
+
+def test_delete_candidate_removes_associated_votes(client):
+    election = _create_election(client)
+    candidate = _create_candidate(client, election["id"], "Alice")
+
+    with client.application.app_context():
+        vote = Voto(
+            eleicao_id=election["id"],
+            candidato_id=candidate["id"],
+            hash_blockchain=str(uuid.uuid4()),
+        )
+        db.session.add(vote)
+        db.session.commit()
+
+    response = client.delete(f"/api/candidatos/{candidate['id']}")
+
+    assert response.status_code == 204
+
+    with client.application.app_context():
+        assert Candidato.query.count() == 0
+        assert Voto.query.count() == 0

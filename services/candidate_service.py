@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 
 from flask import abort
+from werkzeug.exceptions import HTTPException
 
 from dtos.candidate_dto import CreateCandidateDTO, UpdateCandidateDTO
 from models import Candidato, Eleicao, db
@@ -39,51 +40,68 @@ def serialize_candidate(candidate: Candidato) -> dict:
 
 
 def create_candidate(election_id: int, dto: CreateCandidateDTO) -> dict:
-    election = Eleicao.query.get(election_id)
+    election = db.session.get(Eleicao, election_id)
     if not election:
         abort(404, description="Election not found")
-    
+
     if election.ativa:
         abort(400, description="Cannot add candidates to an active election")
-    
-    candidate = Candidato(
-        nome=dto.nome,
-        eleicao_id=election_id,
-        votos_count=0,
-    )
-    db.session.add(candidate)
-    db.session.commit()
-    
-    receipt_hash = _sync_blockchain("add_candidate", add_candidate_onchain, dto.nome)
+
+    try:
+        candidate = Candidato(
+            nome=dto.nome,
+            eleicao_id=election_id,
+            votos_count=0,
+        )
+        db.session.add(candidate)
+        db.session.flush()
+        receipt_hash = _sync_blockchain("add_candidate", add_candidate_onchain, dto.nome)
+        db.session.commit()
+    except HTTPException:
+        db.session.rollback()
+        raise
+    except Exception:
+        db.session.rollback()
+        raise
+
     return _attach_receipt(serialize_candidate(candidate), receipt_hash)
 
 
 def list_candidates(election_id: int) -> list[dict]:
-    election = Eleicao.query.get(election_id)
+    election = db.session.get(Eleicao, election_id)
     if not election:
         abort(404, description="Election not found")
-    
-    candidates = Candidato.query.filter_by(eleicao_id=election_id).order_by(Candidato.id.asc()).all()
+
+    candidates = (
+        db.session.query(Candidato)
+        .filter_by(eleicao_id=election_id)
+        .order_by(Candidato.id.asc())
+        .all()
+    )
     return [serialize_candidate(candidate) for candidate in candidates]
 
 
 def get_candidate(candidate_id: int) -> Candidato | None:
-    return Candidato.query.get(candidate_id)
+    return db.session.get(Candidato, candidate_id)
 
 
 def update_candidate(candidate_id: int, dto: UpdateCandidateDTO) -> dict:
     candidate = get_candidate(candidate_id)
     if not candidate:
         abort(404, description="Candidate not found")
-    
-    election = Eleicao.query.get(candidate.eleicao_id)
+
+    election = db.session.get(Eleicao, candidate.eleicao_id)
     if election and election.ativa:
         abort(400, description="Cannot update candidates in an active election")
-    
+
     if dto.nome is not None:
         candidate.nome = dto.nome
-    
-    db.session.commit()
+
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
     return serialize_candidate(candidate)
 
 
@@ -91,10 +109,17 @@ def delete_candidate(candidate_id: int) -> None:
     candidate = get_candidate(candidate_id)
     if not candidate:
         abort(404, description="Candidate not found")
-    
-    election = Eleicao.query.get(candidate.eleicao_id)
+
+    if is_blockchain_enabled():
+        abort(501, description="Deleting candidates is unsupported while blockchain sync is enabled")
+
+    election = db.session.get(Eleicao, candidate.eleicao_id)
     if election and election.ativa:
         abort(400, description="Cannot delete candidates from an active election")
-    
-    db.session.delete(candidate)
-    db.session.commit()
+
+    try:
+        db.session.delete(candidate)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise

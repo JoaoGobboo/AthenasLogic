@@ -1,10 +1,16 @@
-﻿from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+import uuid
 
 import pytest
+from models import Candidato, Eleicao, Voto, db
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 def _build_payload(offset_days: int = 1) -> dict:
-    now = datetime.utcnow()
+    now = _utc_now()
     return {
         "titulo": "Eleicao de Teste",
         "descricao": "Eleicao para testes automatizados",
@@ -89,7 +95,7 @@ def test_delete_election_removes_resource(client):
 
 
 def test_create_election_rejects_invalid_dates(client):
-    now = datetime.utcnow()
+    now = _utc_now()
     payload = {
         "titulo": "Eleicao Invalida",
         "descricao": "Datas inconsistentes",
@@ -104,3 +110,72 @@ def test_create_election_rejects_invalid_dates(client):
 def test_start_election_returns_404_for_missing_resource(client):
     response = client.post("/api/eleicoes/999/start")
     assert response.status_code == 404
+
+
+def test_create_election_rolls_back_on_blockchain_failure(client, monkeypatch):
+    monkeypatch.setattr("services.election_service.is_blockchain_enabled", lambda: True)
+
+    def failing_configure(_name: str, _candidates: list[str]):
+        raise RuntimeError("rpc unavailable")
+
+    monkeypatch.setattr("services.election_service.configure_election_onchain", failing_configure)
+
+    response = client.post("/api/eleicoes", json=_build_payload())
+
+    assert response.status_code == 502
+
+    with client.application.app_context():
+        assert Eleicao.query.count() == 0
+
+
+def test_update_election_rejects_start_after_existing_end(client):
+    election = _create_election(client)
+    future_start = (datetime.fromisoformat(election["data_fim"]) + timedelta(days=1)).isoformat()
+
+    response = client.put(
+        f"/api/eleicoes/{election['id']}",
+        json={"data_inicio": future_start},
+    )
+
+    assert response.status_code == 400
+
+
+def test_delete_election_removes_candidates_and_votes(client):
+    election = _create_election(client)
+    candidate_response = client.post(
+        f"/api/eleicoes/{election['id']}/candidatos",
+        json={"nome": "Alice"},
+    )
+    assert candidate_response.status_code == 201
+    candidate = candidate_response.json
+
+    with client.application.app_context():
+        vote = Voto(
+            eleicao_id=election["id"],
+            candidato_id=candidate["id"],
+            hash_blockchain=str(uuid.uuid4()),
+        )
+        db.session.add(vote)
+        db.session.commit()
+
+    response = client.delete(f"/api/eleicoes/{election['id']}")
+
+    assert response.status_code == 204
+
+    with client.application.app_context():
+        assert Eleicao.query.count() == 0
+        assert Candidato.query.count() == 0
+        assert Voto.query.count() == 0
+
+
+def test_start_election_rejects_when_end_date_in_past(client):
+    election = _create_election(client)
+
+    with client.application.app_context():
+        record = db.session.get(Eleicao, election["id"])
+        record.data_fim = _utc_now() - timedelta(days=1)
+        db.session.commit()
+
+    response = client.post(f"/api/eleicoes/{election['id']}/start")
+
+    assert response.status_code == 400

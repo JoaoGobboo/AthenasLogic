@@ -28,6 +28,10 @@ def _config_is_complete(config: dict[str, Any]) -> bool:
     return all(config.get(key) for key in REQUIRED_KEYS)
 
 
+def is_db_config_complete(config: dict[str, Any]) -> bool:
+    return _config_is_complete(config)
+
+
 @contextmanager
 def connect_db(config: dict[str, Any]):
     if not _config_is_complete(config):

@@ -8,6 +8,7 @@ from services.candidate_service import (
     list_candidates,
     update_candidate,
 )
+from routes.security import require_auth
 
 
 candidates_bp = Blueprint("candidates", __name__)
@@ -18,6 +19,7 @@ def _format_validation_error(exc: ValidationError) -> list[str]:
 
 
 @candidates_bp.route("/api/eleicoes/<int:election_id>/candidatos", methods=["POST"])
+@require_auth()
 def create(election_id: int) -> tuple:
     """Adiciona um candidato a uma eleição.
     ---
@@ -37,6 +39,11 @@ def create(election_id: int) -> tuple:
         required: true
         schema:
           $ref: '#/definitions/CandidateCreate'
+      - name: X-CSRF-Token
+        in: header
+        type: string
+        required: true
+        description: Token anti-CSRF retornado pelo login
     responses:
       201:
         description: Candidato criado com sucesso
@@ -124,6 +131,7 @@ def index(election_id: int) -> tuple:
 
 
 @candidates_bp.route("/api/candidatos/<int:candidate_id>", methods=["PUT"])
+@require_auth()
 def update(candidate_id: int) -> tuple:
     """Atualiza os dados de um candidato.
     ---
@@ -136,11 +144,21 @@ def update(candidate_id: int) -> tuple:
         type: integer
         format: int64
         description: ID do candidato
+      - name: X-CSRF-Token
+        in: header
+        type: string
+        required: true
+        description: Token anti-CSRF retornado pelo login
       - in: body
         name: payload
         required: true
         schema:
           $ref: '#/definitions/CandidateUpdate'
+      - name: X-CSRF-Token
+        in: header
+        type: string
+        required: true
+        description: Token anti-CSRF retornado pelo login
     responses:
       200:
         description: Candidato atualizado
@@ -168,6 +186,7 @@ def update(candidate_id: int) -> tuple:
 
 
 @candidates_bp.route("/api/candidatos/<int:candidate_id>", methods=["DELETE"])
+@require_auth()
 def delete(candidate_id: int) -> tuple:
     """Remove um candidato.
     ---

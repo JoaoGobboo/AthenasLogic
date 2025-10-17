@@ -13,7 +13,9 @@ class AuditLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     acao = db.Column(db.String(255), nullable=False)
     usuario_id = db.Column(db.Integer, db.ForeignKey("usuarios.id"), nullable=False)
+    eleicao_id = db.Column(db.Integer, db.ForeignKey("eleicoes.id"), nullable=True, index=True)
     timestamp = db.Column(db.DateTime(timezone=True), default=_utcnow)
     detalhes = db.Column(db.Text)
 
     usuario = db.relationship("Usuario", back_populates="audit_logs")
+    eleicao = db.relationship("Eleicao", back_populates="audit_logs")

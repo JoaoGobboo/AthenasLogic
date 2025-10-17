@@ -28,6 +28,7 @@ def build_health_response(
     block_fetcher: Callable[[Web3], int],
     get_db_config: Callable[[], dict],
     database_connected: Callable[[dict], bool],
+    config_checker: Callable[[dict], bool],
     now: Callable[[], float],
 ) -> HealthResponse:
     logs: list[HealthLogEntry] = []
@@ -56,20 +57,35 @@ def build_health_response(
             else:
                 logs.append(HealthLogEntry(level="error", message="Falha na conexao com blockchain"))
 
+    database_configured = False
     database_status = False
+    database_status_label = "unhealthy"
     try:
         db_config = get_db_config()
-        database_status = database_connected(db_config)
+        database_configured = config_checker(db_config)
     except Exception as exc:  # pragma: no cover - defensive guard
-        logs.append(HealthLogEntry(level="error", message=f"Erro na conexao com banco: {exc}"))
+        logs.append(HealthLogEntry(level="error", message=f"Erro ao carregar configuracao do banco: {exc}"))
     else:
-        if database_status:
-            logs.append(HealthLogEntry(level="info", message="Banco conectado com sucesso"))
+        if not database_configured:
+            logs.append(HealthLogEntry(level="info", message="Banco nao configurado; verificacao ignorada"))
+            database_status_label = "not_configured"
         else:
-            logs.append(HealthLogEntry(level="error", message="Falha na conexao com banco"))
+            try:
+                database_status = database_connected(db_config)
+            except Exception as exc:  # pragma: no cover - defensive guard
+                logs.append(HealthLogEntry(level="error", message=f"Erro na conexao com banco: {exc}"))
+                database_status = False
+            else:
+                if database_status:
+                    logs.append(HealthLogEntry(level="info", message="Banco conectado com sucesso"))
+                    database_status_label = "healthy"
+                else:
+                    logs.append(HealthLogEntry(level="error", message="Falha na conexao com banco"))
+                    database_status_label = "unhealthy"
 
     uptime_seconds = max(round(now() - start_time, 2), 0.0)
-    status_code = 200 if blockchain_status and database_status else 500
+    database_ok = database_status or not database_configured
+    status_code = 200 if blockchain_status and database_ok else 500
 
     payload = {
         "blockchain": {
@@ -77,7 +93,9 @@ def build_health_response(
             "latest_block": latest_block,
         },
         "database": {
-            "connected": database_status,
+            "configured": database_configured,
+            "connected": database_status if database_configured else False,
+            "status": database_status_label,
         },
         "service": {
             "uptime_seconds": uptime_seconds,

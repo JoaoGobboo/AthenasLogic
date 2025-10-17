@@ -18,3 +18,4 @@ class Usuario(db.Model):
     created_at = db.Column(db.DateTime(timezone=True), default=_utcnow)
 
     audit_logs = db.relationship("AuditLog", back_populates="usuario")
+    sessions = db.relationship("SessionToken", back_populates="usuario")

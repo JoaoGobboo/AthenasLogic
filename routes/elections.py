@@ -3,6 +3,8 @@ from pydantic import ValidationError
 
 from dtos.election_dto import CreateElectionDTO, UpdateElectionDTO
 from dtos.vote_dto import CastVoteDTO
+from extensions import limiter
+from routes.security import require_auth
 from services.election_service import (
     create_election,
     delete_election,
@@ -36,6 +38,7 @@ def _format_validation_error(exc: ValidationError) -> list[str]:
 
 
 @elections_bp.route("/api/eleicoes", methods=["POST"])
+@require_auth()
 def create() -> tuple:
     """Cria uma nova eleição.
     ---
@@ -49,6 +52,11 @@ def create() -> tuple:
         required: true
         schema:
           $ref: '#/definitions/ElectionCreate'
+      - name: X-CSRF-Token
+        in: header
+        type: string
+        required: true
+        description: Token anti-CSRF retornado pelo login
     responses:
       201:
         description: Eleição criada com sucesso
@@ -168,6 +176,21 @@ def show(election_id: int) -> tuple:
         required: true
         type: integer
         format: int64
+      - name: X-CSRF-Token
+        in: header
+        type: string
+        required: true
+        description: Token anti-CSRF retornado pelo login
+      - name: X-CSRF-Token
+        in: header
+        type: string
+        required: true
+        description: Token anti-CSRF retornado pelo login
+      - name: X-CSRF-Token
+        in: header
+        type: string
+        required: true
+        description: Token anti-CSRF retornado pelo login
     responses:
       200:
         description: Detalhes da eleição
@@ -181,6 +204,7 @@ def show(election_id: int) -> tuple:
 
 
 @elections_bp.route("/api/eleicoes/<int:election_id>", methods=["PUT"])
+@require_auth()
 def update(election_id: int) -> tuple:
     """Atualiza campos editáveis da eleição.
     ---
@@ -197,6 +221,11 @@ def update(election_id: int) -> tuple:
         required: true
         schema:
           $ref: '#/definitions/ElectionUpdate'
+      - name: X-CSRF-Token
+        in: header
+        type: string
+        required: true
+        description: Token anti-CSRF retornado pelo login
     responses:
       200:
         description: Eleição atualizada
@@ -224,6 +253,7 @@ def update(election_id: int) -> tuple:
 
 
 @elections_bp.route("/api/eleicoes/<int:election_id>", methods=["DELETE"])
+@require_auth()
 def delete(election_id: int) -> tuple:
     """Remove a eleição informada.
     ---
@@ -246,6 +276,7 @@ def delete(election_id: int) -> tuple:
 
 
 @elections_bp.route("/api/eleicoes/<int:election_id>/start", methods=["POST"])
+@require_auth()
 def start(election_id: int) -> tuple:
     """Inicia a eleição e opcionalmente sincroniza com o contrato.
     ---
@@ -272,6 +303,7 @@ def start(election_id: int) -> tuple:
 
 
 @elections_bp.route("/api/eleicoes/<int:election_id>/end", methods=["POST"])
+@require_auth()
 def end(election_id: int) -> tuple:
     """Encerra a eleição e opcionalmente sincroniza com o contrato.
     ---
@@ -298,7 +330,10 @@ def end(election_id: int) -> tuple:
 
 
 @elections_bp.route("/api/eleicoes/<int:election_id>/votar", methods=["POST"])
+@require_auth()
+@limiter.limit("10 per minute")
 def cast_vote(election_id: int) -> tuple:
+    """Registra um voto para a eleição informada. Requer header X-CSRF-Token."""
     payload = request.get_json(silent=True) or {}
     try:
         dto = CastVoteDTO(**payload)

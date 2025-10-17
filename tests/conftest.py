@@ -1,4 +1,4 @@
-﻿import os
+import os
 import sys
 
 import pytest
@@ -9,12 +9,21 @@ os.environ.setdefault("SQLALCHEMY_DATABASE_URI", "sqlite://")
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from app import app
+from extensions import limiter
 from models import db
 
 
 @pytest.fixture(scope="session", autouse=True)
 def configure_database():
-    for key in ("DB_HOST", "DB_USER", "DB_PASSWORD", "DB_NAME", "DB_PORT", "CONTRACT_ADDRESS", "CONTRACT_OWNER_PRIVATE_KEY"):
+    for key in (
+        "DB_HOST",
+        "DB_USER",
+        "DB_PASSWORD",
+        "DB_NAME",
+        "DB_PORT",
+        "CONTRACT_ADDRESS",
+        "CONTRACT_OWNER_PRIVATE_KEY",
+    ):
         os.environ.pop(key, None)
     app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite://"
     app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
@@ -33,12 +42,12 @@ def configure_database():
 @pytest.fixture
 def client():
     app.config["TESTING"] = True
+    limiter.enabled = False
     with app.app_context():
         db.session.remove()
         for table in reversed(db.metadata.sorted_tables):
             db.session.execute(table.delete())
         db.session.commit()
-        app.extensions.pop("nonce_store", None)
         app.extensions.pop("session_store", None)
     with app.test_client() as test_client:
         yield test_client

@@ -4,7 +4,7 @@ import time
 from flask import Blueprint, jsonify
 
 from config.BlockChain import get_web3, get_latest_block, is_blockchain_connected
-from config.Database import check_db_connection, get_db_config
+from config.Database import check_db_connection, get_db_config, is_db_config_complete
 from services.health_service import HealthLogEntry, build_health_response
 
 
@@ -71,6 +71,7 @@ def healthcheck() -> tuple:
         block_fetcher=get_latest_block,
         get_db_config=get_db_config,
         database_connected=check_db_connection,
+        config_checker=is_db_config_complete,
         now=time.time,
     )
 

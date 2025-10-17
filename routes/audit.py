@@ -1,11 +1,13 @@
 # routes/audit.py
 
 from flask import Blueprint, jsonify
+from routes.security import require_auth
 from services.audit_service import AuditService
 
 audit_bp = Blueprint('audit_bp', __name__, url_prefix='/api/audit')
 
 @audit_bp.route('/logs', methods=['GET'])
+@require_auth(csrf=False)
 def get_audit_logs():
     """
     Lista todos os logs de auditoria do sistema.
@@ -59,6 +61,7 @@ def get_audit_logs():
     return jsonify(logs_data), 200
 
 @audit_bp.route('/eleicoes/<int:id>', methods=['GET'])
+@require_auth(csrf=False)
 def get_election_audit_logs(id: int):
     """
     Auditoria de uma eleição específica.
@@ -97,4 +100,3 @@ def get_election_audit_logs(id: int):
         } for log in logs
     ]
     return jsonify(logs_data), 200
-

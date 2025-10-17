@@ -3,42 +3,15 @@ from __future__ import annotations
 import secrets
 import string
 from dataclasses import dataclass
-from threading import Lock
-from typing import Callable, Mapping
+from typing import Callable
 
 from eth_account.messages import encode_defunct
 from web3 import Web3
 
-NonceState = Mapping[str, str]
-
-
-class NonceStore:
-    def __init__(self, initial_state: Mapping[str, str] | None = None) -> None:
-        self._lock = Lock()
-        self._state: dict[str, str] = dict(initial_state or {})
-
-    def snapshot(self) -> dict[str, str]:
-        with self._lock:
-            return dict(self._state)
-
-    def replace(self, state: Mapping[str, str]) -> None:
-        with self._lock:
-            self._state = dict(state)
-
-    def clear(self) -> None:
-        with self._lock:
-            self._state.clear()
-
-
 @dataclass(frozen=True)
 class ServiceResponse:
     payload: dict
-    state: dict[str, str]
     status: int = 200
-
-
-def _clone_state(state: NonceState) -> dict[str, str]:
-    return dict(state) if state else {}
 
 
 def default_nonce_factory(length: int = 16, alphabet: str = string.ascii_letters + string.digits) -> str:
@@ -47,27 +20,25 @@ def default_nonce_factory(length: int = 16, alphabet: str = string.ascii_letters
 
 def generate_nonce_response(
     address: str,
-    state: NonceState,
+    store,
     nonce_factory: Callable[[], str] | None = None,
 ) -> ServiceResponse:
     factory = nonce_factory or default_nonce_factory
     nonce = factory()
-    new_state = _clone_state(state)
-    new_state[address] = nonce
-    return ServiceResponse(payload={"nonce": nonce}, state=new_state)
+    store.save_nonce(address, nonce)
+    return ServiceResponse(payload={"nonce": nonce})
 
 
 def verify_signature_response(
     address: str,
     signature: str,
-    state: NonceState,
+    store,
     web3: Web3,
 ) -> ServiceResponse:
-    message = state.get(address) if state else None
+    message = store.peek_nonce(address)
     if not message:
         return ServiceResponse(
             payload={"success": False, "error": "No nonce found for this address"},
-            state=_clone_state(state),
             status=400,
         )
 
@@ -77,7 +48,6 @@ def verify_signature_response(
     except Exception as exc:
         return ServiceResponse(
             payload={"success": False, "error": str(exc)},
-            state=_clone_state(state),
             status=400,
         )
 
@@ -86,29 +56,22 @@ def verify_signature_response(
     if resolved_address != expected_address:
         return ServiceResponse(
             payload={"success": False, "error": "Invalid signature"},
-            state=_clone_state(state),
             status=401,
         )
 
-    new_state = _clone_state(state)
-    new_state.pop(address, None)
+    store.pop_nonce(address)
     return ServiceResponse(
         payload={"success": True, "address": expected_address},
-        state=new_state,
     )
 
 
-def logout_response(address: str, state: NonceState) -> ServiceResponse:
+def logout_response(address: str, store) -> ServiceResponse:
     if not address:
         return ServiceResponse(
             payload={"success": False, "error": "Address is required"},
-            state=_clone_state(state),
             status=400,
         )
-
-    new_state = _clone_state(state)
-    new_state.pop(address, None)
+    store.pop_nonce(address)
     return ServiceResponse(
         payload={"success": True, "message": "Logged out successfully"},
-        state=new_state,
     )

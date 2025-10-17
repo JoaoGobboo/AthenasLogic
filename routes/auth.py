@@ -1,75 +1,39 @@
 from __future__ import annotations
 
-from flask import Blueprint, current_app, jsonify, request
+from flask import Blueprint, g, jsonify, request
 
 from config.BlockChain import get_web3
+from extensions import limiter
 from dtos.auth_dto import CheckAuthDTO, RequestNonceDTO
-from services.auth_service import (
-    NonceStore,
-    ServiceResponse,
-    generate_nonce_response,
-    logout_response,
-    verify_signature_response,
-)
-from services.session_service import SessionStore
-from services.user_service import get_or_create_user, get_user_by_id, serialize_user
+from routes.security import extract_bearer_token, get_session_store, require_auth
+from services.auth_service import ServiceResponse, generate_nonce_response, logout_response, verify_signature_response
+from services.session_service import ResolvedSession
+from services.user_service import get_or_create_user, serialize_user
 
 
 auth_bp = Blueprint("auth", __name__)
-_NONCE_STORE_KEY = "nonce_store"
-_SESSION_STORE_KEY = "session_store"
 
 
 def _extract_payload() -> dict:
     return request.get_json(silent=True) or {}
 
 
-def _get_nonce_store() -> NonceStore:
-    store = current_app.extensions.get(_NONCE_STORE_KEY)
-    if store is None:
-        store = NonceStore()
-        current_app.extensions[_NONCE_STORE_KEY] = store
-    return store
-
-
-def _get_session_store() -> SessionStore:
-    store = current_app.extensions.get(_SESSION_STORE_KEY)
-    if store is None:
-        store = SessionStore()
-        current_app.extensions[_SESSION_STORE_KEY] = store
-    return store
-
-
-def _apply_service_response(store: NonceStore, service_response: ServiceResponse) -> tuple:
-    store.replace(service_response.state)
+def _apply_service_response(service_response: ServiceResponse) -> tuple:
     return jsonify(service_response.payload), service_response.status
 
-
-def _extract_bearer_token() -> str | None:
-    header = request.headers.get("Authorization")
-    if not header:
-        return None
-    if not header.lower().startswith("bearer "):
-        return None
-    token = header.split(" ", 1)[1].strip()
-    return token or None
-
-
-def _resolve_authenticated_user():
-    token = _extract_bearer_token()
+def _resolve_authenticated_user() -> tuple[ResolvedSession | None, str | None]:
+    token = extract_bearer_token()
     if not token:
         return None, None
-    store = _get_session_store()
-    user_id = store.resolve(token)
-    if not user_id:
+    store = get_session_store()
+    session = store.resolve(token)
+    if not session:
         return None, token
-    user = get_user_by_id(user_id)
-    if user is None:
-        store.destroy(token)
-    return user, token
+    return session, token
 
 
 @auth_bp.route("/auth/request_nonce", methods=["POST"])
+@limiter.limit("10 per minute")
 def request_nonce() -> tuple:
     """Solicita um nonce temporario para autenticacao.
     ---
@@ -113,13 +77,13 @@ def request_nonce() -> tuple:
     except Exception as exc:  # pragma: no cover - validation errors are unit tested in dtos
         return jsonify({"error": str(exc)}), 400
 
-    store = _get_nonce_store()
-    state = store.snapshot()
-    service_response = generate_nonce_response(dto.address, state)
-    return _apply_service_response(store, service_response)
+    store = get_session_store()
+    service_response = generate_nonce_response(dto.address, store)
+    return _apply_service_response(service_response)
 
 
 @auth_bp.route("/auth/verify", methods=["POST"])
+@limiter.limit("10 per minute")
 def verify_signature() -> tuple:
     """Valida a assinatura do nonce para autenticar o usuario.
     ---
@@ -183,15 +147,14 @@ def verify_signature() -> tuple:
     except RuntimeError as exc:
         return jsonify({"error": str(exc)}), 503
 
-    store = _get_nonce_store()
-    state = store.snapshot()
+    store = get_session_store()
     service_response = verify_signature_response(
         address=dto.address,
         signature=dto.signature,
-        state=state,
+        store=store,
         web3=web3,
     )
-    return _apply_service_response(store, service_response)
+    return _apply_service_response(service_response)
 
 
 @auth_bp.route("/auth/logout", methods=["POST"])
@@ -233,13 +196,13 @@ def legacy_logout() -> tuple:
               type: string
     """
     payload = _extract_payload()
-    store = _get_nonce_store()
-    state = store.snapshot()
-    service_response = logout_response(payload.get("address"), state)
-    return _apply_service_response(store, service_response)
+    store = get_session_store()
+    service_response = logout_response(payload.get("address"), store)
+    return _apply_service_response(service_response)
 
 
 @auth_bp.route("/api/auth/login", methods=["POST"])
+@limiter.limit("10 per minute")
 def login() -> tuple:
     """Autentica o usuario via assinatura de carteira e inicia sessao.
     ---
@@ -282,25 +245,24 @@ def login() -> tuple:
     except RuntimeError as exc:
         return jsonify({"error": str(exc)}), 503
 
-    nonce_store = _get_nonce_store()
-    state = nonce_store.snapshot()
+    nonce_store = get_session_store()
     verification_response = verify_signature_response(
         address=dto.address,
         signature=dto.signature,
-        state=state,
+        store=nonce_store,
         web3=web3,
     )
-    nonce_store.replace(verification_response.state)
 
     if not verification_response.payload.get("success"):
         return jsonify(verification_response.payload), verification_response.status
 
     normalized_address = verification_response.payload.get("address")
     user = get_or_create_user(normalized_address)
-    session = _get_session_store().create(user.id)
+    session = get_session_store().create(user.id)
 
     body = {
         "token": session.token,
+        "csrf_token": session.csrf_token,
         "user": serialize_user(user),
     }
     return jsonify(body), 200
@@ -318,15 +280,16 @@ def current_user() -> tuple:
       401:
         description: Token ausente ou invalido
     """
-    user, _ = _resolve_authenticated_user()
-    if user is None:
+    resolved, _ = _resolve_authenticated_user()
+    if resolved is None:
         return jsonify({"error": "Unauthorized"}), 401
-    return jsonify(serialize_user(user)), 200
+    return jsonify(serialize_user(resolved.user)), 200
 
 
 @auth_bp.route("/api/auth/logout", methods=["POST"])
+@require_auth()
 def logout_session() -> tuple:
-    """Encerra a sessao autenticada via token Bearer.
+    """Encerra a sessao autenticada via token Bearer (requer X-CSRF-Token).
     ---
     tags:
       - Auth
@@ -336,10 +299,6 @@ def logout_session() -> tuple:
       401:
         description: Token ausente
     """
-    token = _extract_bearer_token()
-    if token is None:
-        return jsonify({"error": "Missing bearer token"}), 401
-
-    store = _get_session_store()
-    store.destroy(token)
+    store = get_session_store()
+    store.destroy(g.current_session.token)
     return jsonify({"success": True, "message": "Sessao encerrada"}), 200

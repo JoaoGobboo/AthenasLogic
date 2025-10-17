@@ -8,6 +8,7 @@ from werkzeug.exceptions import HTTPException
 
 from config.Database import build_sqlalchemy_uri
 from models import db
+from extensions import limiter
 
 # Importações de rotas existentes
 from routes.auth import auth_bp
@@ -64,6 +65,9 @@ def create_app() -> Flask:
         app.config["SQLALCHEMY_DATABASE_URI"] = build_sqlalchemy_uri()
 
     db.init_app(app)
+    limiter.init_app(app)
+    if app.config.get("TESTING"):
+        limiter.enabled = False
     Swagger(app, template=SWAGGER_TEMPLATE, config=SWAGGER_CONFIG)
 
     with app.app_context():
@@ -105,4 +109,5 @@ def create_app() -> Flask:
 app = create_app()
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    debug_mode = os.getenv("FLASK_DEBUG", "0") in {"1", "true", "True"}
+    app.run(host="0.0.0.0", port=5000, debug=debug_mode)

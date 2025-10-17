@@ -66,8 +66,8 @@ def _mock_successful_signature(monkeypatch):
     def fake_get_web3():
         return object()
 
-    def fake_verify_signature_response(address, signature, state, web3):
-        return ServiceResponse(payload={"success": True, "address": address}, state={}, status=200)
+    def fake_verify_signature_response(address, signature, store, web3):
+        return ServiceResponse(payload={"success": True, "address": address}, status=200)
 
     monkeypatch.setattr("routes.auth.get_web3", fake_get_web3)
     monkeypatch.setattr("routes.auth.verify_signature_response", fake_verify_signature_response)
@@ -79,6 +79,7 @@ def _perform_login(client, monkeypatch):
     assert response.status_code == 200
     body = response.get_json()
     assert body.get("token")
+    assert body.get("csrf_token")
     return body
 
 
@@ -105,7 +106,11 @@ def test_me_returns_user_for_valid_session(client, monkeypatch):
 def test_logout_session_revokes_token(client, monkeypatch):
     body = _perform_login(client, monkeypatch)
     token = body["token"]
-    response = client.post("/api/auth/logout", headers={"Authorization": f"Bearer {token}"})
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "X-CSRF-Token": body["csrf_token"],
+    }
+    response = client.post("/api/auth/logout", headers=headers)
     assert response.status_code == 200
     me_again = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
     assert me_again.status_code == 401
@@ -120,7 +125,11 @@ def test_update_profile_persists_changes(client, monkeypatch):
     body = _perform_login(client, monkeypatch)
     token = body["token"]
     payload = {"nome": "Alice", "email": "alice@example.com", "bio": "Entusiasta de blockchain"}
-    response = client.put("/api/users/profile", json=payload, headers={"Authorization": f"Bearer {token}"})
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "X-CSRF-Token": body["csrf_token"],
+    }
+    response = client.put("/api/users/profile", json=payload, headers=headers)
     assert response.status_code == 200
     updated = response.get_json()
     assert updated["nome"] == payload["nome"]

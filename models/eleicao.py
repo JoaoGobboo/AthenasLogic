@@ -21,3 +21,4 @@ class Eleicao(db.Model):
         back_populates="eleicao",
         cascade="all, delete-orphan",
     )
+    audit_logs = db.relationship("AuditLog", back_populates="eleicao")

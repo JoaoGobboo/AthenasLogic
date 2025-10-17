@@ -3,10 +3,11 @@ from __future__ import annotations
 import logging
 
 from flask import abort
+from sqlalchemy import func, select
 from werkzeug.exceptions import HTTPException
 
 from dtos.candidate_dto import CreateCandidateDTO, UpdateCandidateDTO
-from models import Candidato, Eleicao, db
+from models import Candidato, Eleicao, Voto, db
 from services.blockchain_integration import add_candidate_onchain, is_blockchain_enabled
 
 
@@ -30,12 +31,17 @@ def _sync_blockchain(action: str, callback, *args) -> str | None:
     return receipt.transactionHash.hex()
 
 
+def _candidate_vote_total(candidate_id: int) -> int:
+    stmt = select(func.count(Voto.id)).where(Voto.candidato_id == candidate_id)
+    return int(db.session.execute(stmt).scalar_one() or 0)
+
+
 def serialize_candidate(candidate: Candidato) -> dict:
     return {
         "id": candidate.id,
         "nome": candidate.nome,
         "eleicao_id": candidate.eleicao_id,
-        "votos_count": candidate.votos_count,
+        "votos_count": _candidate_vote_total(candidate.id),
     }
 
 

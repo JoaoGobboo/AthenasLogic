@@ -4,7 +4,7 @@ import logging
 from typing import Optional
 
 from flask import abort
-from sqlalchemy import func
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from werkzeug.exceptions import HTTPException
 
@@ -54,7 +54,6 @@ def register_vote(election_id: int, dto: CastVoteDTO) -> dict:
         candidato_id=candidate.id,
         hash_blockchain=_normalize_hash(dto.hash_blockchain),
     )
-    candidate.votos_count = (candidate.votos_count or 0) + 1
     db.session.add(vote)
 
     try:
@@ -76,13 +75,14 @@ def register_vote(election_id: int, dto: CastVoteDTO) -> dict:
         raise
 
     db.session.refresh(vote)
-    db.session.refresh(candidate)
+    vote_total_stmt = select(func.count(Voto.id)).where(Voto.candidato_id == candidate.id)
+    total_votes_candidate = int(db.session.execute(vote_total_stmt).scalar_one() or 0)
     payload = {
         "id": vote.id,
         "eleicao_id": election_id,
         "candidato_id": candidate.id,
         "hash_blockchain": vote.hash_blockchain,
-        "total_votos_candidato": candidate.votos_count,
+        "total_votos_candidato": total_votes_candidate,
     }
     if receipt_hash:
         payload["blockchain_tx"] = receipt_hash
@@ -94,22 +94,28 @@ def get_election_results(election_id: int) -> dict:
     if election is None:
         abort(404, description="Election not found")
 
-    candidates = (
-        db.session.query(Candidato)
-        .filter_by(eleicao_id=election_id)
-        .order_by(Candidato.votos_count.desc(), Candidato.id.asc())
-        .all()
+    stmt = (
+        select(
+            Candidato.id,
+            Candidato.nome,
+            func.count(Voto.id).label("total"),
+        )
+        .outerjoin(Voto, Voto.candidato_id == Candidato.id)
+        .where(Candidato.eleicao_id == election_id)
+        .group_by(Candidato.id)
+        .order_by(func.count(Voto.id).desc(), Candidato.id.asc())
     )
-    total_votes = sum(candidate.votos_count or 0 for candidate in candidates)
+    rows = list(db.session.execute(stmt))
+    total_votes = sum(int(row.total or 0) for row in rows)
     return {
         "election": serialize_election(election),
         "results": [
             {
-                "id": candidate.id,
-                "nome": candidate.nome,
-                "votos": candidate.votos_count,
+                "id": row.id,
+                "nome": row.nome,
+                "votos": int(row.total or 0),
             }
-            for candidate in candidates
+            for row in rows
         ],
         "total_votos": total_votes,
     }

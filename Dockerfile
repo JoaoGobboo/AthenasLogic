@@ -19,6 +19,5 @@ ENV PYTHONUNBUFFERED=1
 # Expõe a porta que o Flask usa
 EXPOSE 5000
 
-# --- CORREÇÃO AQUI ---
-# Comando para rodar o Flask como um módulo, respeitando FLASK_APP e PYTHONPATH
-CMD ["flask", "run", "--host=0.0.0.0"]
+# Usa Gunicorn como servidor WSGI em produção
+CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:5000", "app:app"]

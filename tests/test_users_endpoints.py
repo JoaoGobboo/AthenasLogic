@@ -9,7 +9,7 @@ from services.auth_service import ServiceResponse
 @pytest.mark.usefixtures("client")
 def test_health_endpoint(client):
     response = client.get("/health")
-    assert response.status_code in {200, 500}
+    assert response.status_code in {200, 503}
     assert set(response.json.keys()) == {"blockchain", "database", "service"}
 
 

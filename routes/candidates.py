@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 from flask import Blueprint, jsonify, request
 from pydantic import ValidationError
 

@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 # routes/blockchain.py
 
 from flask import Blueprint, jsonify
@@ -73,4 +75,3 @@ def verify_hash(hash: str):
         return jsonify(result), status_code
         
     return jsonify(result), 200
-

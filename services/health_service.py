@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from typing import Callable
 
@@ -30,36 +31,100 @@ def build_health_response(
     database_connected: Callable[[dict], bool],
     config_checker: Callable[[dict], bool],
     now: Callable[[], float],
+    retry_attempts: int = 1,
+    retry_delay: float = 0.0,
+    require_blockchain: bool = False,
+    require_database: bool = True,
+    sleep: Callable[[float], None] | None = None,
 ) -> HealthResponse:
     logs: list[HealthLogEntry] = []
 
+    attempts = max(1, retry_attempts)
+    delay = retry_delay if retry_delay > 0 else 0.0
+    sleeper = sleep or time.sleep
+
     latest_block: int | None = None
     blockchain_status = False
-    try:
-        web3 = get_web3()
-    except Exception as exc:  # pragma: no cover - defensive guard
-        logs.append(HealthLogEntry(level="error", message=f"Erro ao inicializar Web3: {exc}"))
-    else:
+    blockchain_status_label = "unhealthy"
+    blockchain_configured = True
+
+    web3: Web3 | None = None
+    for attempt in range(1, attempts + 1):
         try:
-            blockchain_status = blockchain_connected(web3)
+            web3 = get_web3()
+            blockchain_configured = True
+            if attempt > 1:
+                logs.append(
+                    HealthLogEntry(
+                        level="info",
+                        message=f"Conexão com Web3 restabelecida após {attempt} tentativas",
+                    )
+                )
+            break
         except Exception as exc:  # pragma: no cover - defensive guard
-            logs.append(HealthLogEntry(level="error", message=f"Erro ao verificar blockchain: {exc}"))
-            blockchain_status = False
-        else:
-            if blockchain_status:
-                try:
-                    latest_block = block_fetcher(web3)
-                    logs.append(HealthLogEntry(level="info", message="Blockchain conectada"))
-                    logs.append(HealthLogEntry(level="info", message=f"Ultimo bloco: {latest_block}"))
-                except Exception as exc:  # pragma: no cover - defensive guard
-                    logs.append(HealthLogEntry(level="error", message=f"Erro ao obter ultimo bloco: {exc}"))
-                    blockchain_status = False
-            else:
-                logs.append(HealthLogEntry(level="error", message="Falha na conexao com blockchain"))
+            message = str(exc)
+            if isinstance(exc, RuntimeError) and "No blockchain provider configured" in message:
+                blockchain_configured = False
+                blockchain_status_label = "not_configured"
+                logs.append(
+                    HealthLogEntry(
+                        level="warning",
+                        message="Provider da blockchain não configurado; pulando verificação",
+                    )
+                )
+                web3 = None
+                break
+            blockchain_configured = True
+            logs.append(
+                HealthLogEntry(
+                    level="error",
+                    message=(
+                        f"Falha ao inicializar Web3 (tentativa {attempt}/{attempts}): {exc}"
+                    ),
+                )
+            )
+            web3 = None
+            if attempt < attempts and delay:
+                sleeper(delay)
+
+    if web3 is not None:
+        for attempt in range(1, attempts + 1):
+            try:
+                blockchain_status = bool(blockchain_connected(web3))
+                break
+            except Exception as exc:  # pragma: no cover - defensive guard
+                logs.append(
+                    HealthLogEntry(
+                        level="error",
+                        message=(
+                            f"Erro ao verificar blockchain (tentativa {attempt}/{attempts}): {exc}"
+                        ),
+                    )
+                )
+                blockchain_status = False
+                if attempt < attempts and delay:
+                    sleeper(delay)
+
+        if blockchain_status:
+            try:
+                latest_block = block_fetcher(web3)
+                logs.append(HealthLogEntry(level="info", message="Blockchain conectada"))
+                logs.append(HealthLogEntry(level="info", message=f"Ultimo bloco: {latest_block}"))
+                blockchain_status_label = "healthy"
+            except Exception as exc:  # pragma: no cover - defensive guard
+                logs.append(HealthLogEntry(level="error", message=f"Erro ao obter ultimo bloco: {exc}"))
+                blockchain_status = False
+                blockchain_status_label = "unhealthy"
+        elif blockchain_configured:
+            logs.append(HealthLogEntry(level="error", message="Falha na conexao com blockchain"))
+
+    if not blockchain_configured:
+        blockchain_status = False
 
     database_configured = False
     database_status = False
     database_status_label = "unhealthy"
+    db_config: dict | None = None
     try:
         db_config = get_db_config()
         database_configured = config_checker(db_config)
@@ -70,27 +135,49 @@ def build_health_response(
             logs.append(HealthLogEntry(level="info", message="Banco nao configurado; verificacao ignorada"))
             database_status_label = "not_configured"
         else:
-            try:
-                database_status = database_connected(db_config)
-            except Exception as exc:  # pragma: no cover - defensive guard
-                logs.append(HealthLogEntry(level="error", message=f"Erro na conexao com banco: {exc}"))
-                database_status = False
-            else:
-                if database_status:
-                    logs.append(HealthLogEntry(level="info", message="Banco conectado com sucesso"))
-                    database_status_label = "healthy"
-                else:
-                    logs.append(HealthLogEntry(level="error", message="Falha na conexao com banco"))
+            for attempt in range(1, attempts + 1):
+                try:
+                    database_status = database_connected(db_config)
+                    if database_status:
+                        logs.append(HealthLogEntry(level="info", message="Banco conectado com sucesso"))
+                        database_status_label = "healthy"
+                    else:
+                        logs.append(HealthLogEntry(level="error", message="Falha na conexao com banco"))
+                        database_status_label = "unhealthy"
+                    break
+                except Exception as exc:  # pragma: no cover - defensive guard
+                    logs.append(
+                        HealthLogEntry(
+                            level="error",
+                            message=(
+                                f"Erro na conexao com banco (tentativa {attempt}/{attempts}): {exc}"
+                            ),
+                        )
+                    )
+                    database_status = False
                     database_status_label = "unhealthy"
+                    if attempt < attempts and delay:
+                        sleeper(delay)
 
     uptime_seconds = max(round(now() - start_time, 2), 0.0)
-    database_ok = database_status or not database_configured
-    status_code = 200 if blockchain_status and database_ok else 500
+    database_ready = (
+        database_status
+        or not database_configured
+        or not require_database
+    )
+    blockchain_ready = (
+        blockchain_status
+        or not blockchain_configured
+        or not require_blockchain
+    )
+    status_code = 200 if database_ready and blockchain_ready else 503
 
     payload = {
         "blockchain": {
             "connected": blockchain_status,
             "latest_block": latest_block,
+            "configured": blockchain_configured,
+            "status": blockchain_status_label,
         },
         "database": {
             "configured": database_configured,

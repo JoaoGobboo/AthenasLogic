@@ -189,3 +189,68 @@ def test_verify_vote_route_success(client, monkeypatch):
     assert response.status_code == 200
     data = response.get_json()
     assert data["verified"] is True
+
+
+class _DummyReceipt:
+    def __init__(self, value: str) -> None:
+        self.transactionHash = _HexStub(value)
+
+
+class _HexStub:
+    def __init__(self, value: str) -> None:
+        self._value = value
+
+    def hex(self) -> str:
+        return self._value
+
+
+@pytest.mark.usefixtures("client")
+def test_cast_vote_attaches_blockchain_hash_when_sync_succeeds(client, monkeypatch):
+    with client.application.app_context():
+        election_id, candidate_id = _seed_election()
+        candidate = db.session.get(Candidato, candidate_id)
+        candidate.blockchain_index = None
+        db.session.commit()
+
+    headers = _auth_headers(client, monkeypatch)
+
+    monkeypatch.setattr("services.vote_service.is_blockchain_enabled", lambda: True)
+    monkeypatch.setattr(
+        "services.vote_service.record_vote_onchain",
+        lambda index: _DummyReceipt(f"0xmock{index}")
+    )
+
+    response = client.post(
+        f"/api/eleicoes/{election_id}/votar",
+        json={"candidato_id": candidate_id, "hash_blockchain": "0xABCDEF"},
+        headers=headers,
+    )
+
+    assert response.status_code == 201
+    payload = response.get_json()
+    assert payload["blockchain_tx"] == "0xmock0"
+
+
+@pytest.mark.usefixtures("client")
+def test_cast_vote_returns_502_when_blockchain_sync_fails(client, monkeypatch):
+    with client.application.app_context():
+        election_id, candidate_id = _seed_election()
+
+    headers = _auth_headers(client, monkeypatch)
+
+    monkeypatch.setattr("services.vote_service.is_blockchain_enabled", lambda: True)
+
+    def failing_sync(_index: int):  # pragma: no cover - path under test
+        raise RuntimeError("rpc unavailable")
+
+    monkeypatch.setattr("services.vote_service.record_vote_onchain", failing_sync)
+
+    response = client.post(
+        f"/api/eleicoes/{election_id}/votar",
+        json={"candidato_id": candidate_id, "hash_blockchain": "0xdeadbeef"},
+        headers=headers,
+    )
+
+    assert response.status_code == 502
+    body = response.get_json()
+    assert "blockchain" in body.get("description", "").lower()

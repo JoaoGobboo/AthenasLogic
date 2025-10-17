@@ -8,7 +8,7 @@ services:
     container_name: flask_app
     ports:
       - "5000:5000"
-    env_file: # <<< ADICIONADO para carregar chaves do .env
+    env_file: # <<< Adicionado para carregar chaves do .env
       - .env
     environment:
       - FLASK_APP=app.py
@@ -21,7 +21,7 @@ services:
       - DB_USER=usuario
       - DB_PASSWORD=senha123
     depends_on:
-      db: # <<< CONDIÇÃO DE SAÚDE ADICIONADA
+      db: # <<< Condição de saúde adicionada
         condition: service_healthy
 
   db:
@@ -37,11 +37,10 @@ services:
       - "8000:3306"
     volumes:
       - db_data:/var/lib/mysql
-    healthcheck: # <<< BLOCO DE HEALTHCHECK ADICIONADO
+    healthcheck: # <<< Bloco de healthcheck adicionado
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       timeout: 20s
       retries: 10
 
 volumes:
   db_data:
-

@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 # routes/audit.py
 
 from flask import Blueprint, jsonify

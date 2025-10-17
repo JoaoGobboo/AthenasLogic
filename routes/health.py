@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 import logging
 import time
 
@@ -60,7 +62,7 @@ def healthcheck() -> tuple:
                   format: float
                 version:
                   type: string
-      500:
+      503:
         description: Dependências indisponíveis
     """
     response = build_health_response(
@@ -73,6 +75,29 @@ def healthcheck() -> tuple:
         database_connected=check_db_connection,
         config_checker=is_db_config_complete,
         now=time.time,
+    )
+
+    _log_health_entries(response.logs)
+    return jsonify(response.payload), response.status_code
+
+
+@health_bp.route("/healthz", methods=["GET"])
+def healthcheck_ready() -> tuple:
+    """Readiness probe que exige dependências externas ativas."""
+    response = build_health_response(
+        start_time=START_TIME,
+        version=VERSION,
+        get_web3=get_web3,
+        blockchain_connected=is_blockchain_connected,
+        block_fetcher=get_latest_block,
+        get_db_config=get_db_config,
+        database_connected=check_db_connection,
+        config_checker=is_db_config_complete,
+        now=time.time,
+        retry_attempts=3,
+        retry_delay=0.2,
+        require_blockchain=True,
+        require_database=True,
     )
 
     _log_health_entries(response.logs)

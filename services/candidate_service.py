@@ -36,12 +36,54 @@ def _candidate_vote_total(candidate_id: int) -> int:
     return int(db.session.execute(stmt).scalar_one() or 0)
 
 
+def ensure_candidate_indices(election_id: int) -> dict[int, int]:
+    """Garantir que os índices locais reflitam a ordem 0-based usada no contrato."""
+    candidates = (
+        db.session.query(Candidato)
+        .filter_by(eleicao_id=election_id)
+        .order_by(Candidato.id.asc())
+        .all()
+    )
+
+    mapping: dict[int, int] = {}
+    updated_ids: list[int] = []
+    for position, candidate in enumerate(candidates):
+        mapping[candidate.id] = position
+        if candidate.blockchain_index != position:
+            candidate.blockchain_index = position
+            updated_ids.append(candidate.id)
+
+    if updated_ids:
+        db.session.flush()
+        logging.info(
+            "Reindexed blockchain candidates for election_id=%s; updated_ids=%s",
+            election_id,
+            updated_ids,
+        )
+
+    return mapping
+
+
+def validate_candidate_indices(election_id: int) -> bool:
+    """Verifica se os índices persistidos estão coerentes sem alterar os dados."""
+    candidates = (
+        db.session.query(Candidato)
+        .filter_by(eleicao_id=election_id)
+        .order_by(Candidato.id.asc())
+        .all()
+    )
+    return all(
+        candidate.blockchain_index == position for position, candidate in enumerate(candidates)
+    )
+
+
 def serialize_candidate(candidate: Candidato) -> dict:
     return {
         "id": candidate.id,
         "nome": candidate.nome,
         "eleicao_id": candidate.eleicao_id,
         "votos_count": _candidate_vote_total(candidate.id),
+        "blockchain_index": candidate.blockchain_index,
     }
 
 
@@ -61,6 +103,7 @@ def create_candidate(election_id: int, dto: CreateCandidateDTO) -> dict:
         )
         db.session.add(candidate)
         db.session.flush()
+        ensure_candidate_indices(election_id)
         receipt_hash = _sync_blockchain("add_candidate", add_candidate_onchain, dto.nome)
         db.session.commit()
     except HTTPException:
@@ -77,6 +120,8 @@ def list_candidates(election_id: int) -> list[dict]:
     election = db.session.get(Eleicao, election_id)
     if not election:
         abort(404, description="Election not found")
+
+    ensure_candidate_indices(election_id)
 
     candidates = (
         db.session.query(Candidato)
@@ -129,3 +174,15 @@ def delete_candidate(candidate_id: int) -> None:
     except Exception:
         db.session.rollback()
         raise
+
+
+__all__ = [
+    "serialize_candidate",
+    "create_candidate",
+    "list_candidates",
+    "get_candidate",
+    "update_candidate",
+    "delete_candidate",
+    "ensure_candidate_indices",
+    "validate_candidate_indices",
+]

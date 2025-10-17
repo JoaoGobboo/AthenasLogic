@@ -15,6 +15,7 @@ from services.blockchain_integration import (
     record_vote_onchain,
     verify_transaction_on_chain,
 )
+from services.candidate_service import ensure_candidate_indices
 from services.election_service import serialize_election
 
 
@@ -49,6 +50,17 @@ def register_vote(election_id: int, dto: CastVoteDTO) -> dict:
     if candidate is None or candidate.eleicao_id != election_id:
         abort(404, description="Candidate not found for this election")
 
+    # Garante que o índice 0-based utilizado pelo contrato esteja alinhado com o banco local
+    index_map = ensure_candidate_indices(election_id)
+    candidate_index = index_map.get(candidate.id)
+    if candidate_index is None:
+        logger.error(
+            "Unable to resolve blockchain index for candidate_id=%s election_id=%s",
+            candidate.id,
+            election_id,
+        )
+        abort(500, description="Failed to reconcile candidate index for blockchain sync")
+
     vote = Voto(
         eleicao_id=election_id,
         candidato_id=candidate.id,
@@ -62,7 +74,7 @@ def register_vote(election_id: int, dto: CastVoteDTO) -> dict:
         db.session.rollback()
         abort(409, description="Vote already registered")
 
-    receipt_hash = _sync_vote_on_blockchain(candidate.id)
+    receipt_hash = _sync_vote_on_blockchain(candidate_index)
 
     try:
         db.session.commit()

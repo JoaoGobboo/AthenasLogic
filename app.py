@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 import logging
 import os
 
@@ -29,7 +31,7 @@ SWAGGER_TEMPLATE = {
     "swagger": "2.0",
     "info": {
         "title": "Athenas Logic API",
-        "description": "API para autenticaÃ§Ã£o via blockchain e operaÃ§Ãµes eleitorais.",
+        "description": "API para autenticação via blockchain e operações eleitorais.",
         "version": "1.0.0",
     },
     "schemes": ["http", "https"],

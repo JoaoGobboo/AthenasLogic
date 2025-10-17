@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
 """Implanta o contrato AthenaElection em uma testnet Ethereum."""
 
 from __future__ import annotations

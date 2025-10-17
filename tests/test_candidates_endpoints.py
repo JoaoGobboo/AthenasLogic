@@ -2,8 +2,9 @@ from datetime import datetime, timedelta, timezone
 import uuid
 
 import pytest
-from models import Candidato, Voto, db
+from models import Candidato, Eleicao, Voto, db
 from services.auth_service import ServiceResponse
+from services.candidate_service import ensure_candidate_indices, validate_candidate_indices
 
 
 def _utc_now() -> datetime:
@@ -77,6 +78,7 @@ def test_create_candidate_returns_created_candidate(client, monkeypatch):
     assert body["nome"] == "Alice"
     assert body["eleicao_id"] == election["id"]
     assert body["votos_count"] == 0
+    assert body["blockchain_index"] == 0
     assert "blockchain_tx" not in body
 
 
@@ -138,15 +140,58 @@ def test_list_candidates_returns_all_for_election(client, monkeypatch):
     _create_candidate(client, election["id"], headers, "Alice")
     _create_candidate(client, election["id"], headers, "Bob")
     _create_candidate(client, election["id"], headers, "Charlie")
-    
+
     response = client.get(f"/api/eleicoes/{election['id']}/candidatos")
-    
+
     assert response.status_code == 200
     candidates = response.json
     assert len(candidates) == 3
     assert candidates[0]["nome"] == "Alice"
     assert candidates[1]["nome"] == "Bob"
     assert candidates[2]["nome"] == "Charlie"
+    assert [candidate["blockchain_index"] for candidate in candidates] == [0, 1, 2]
+
+
+def test_list_candidates_repairs_inconsistent_blockchain_indices(client, monkeypatch):
+    headers = _auth_headers(client, monkeypatch)
+    election = _create_election(client, headers)
+    candidate = _create_candidate(client, election["id"], headers, "Desalinhado")
+
+    with client.application.app_context():
+        record = db.session.get(Candidato, candidate["id"])
+        record.blockchain_index = 7
+        db.session.commit()
+
+    response = client.get(f"/api/eleicoes/{election['id']}/candidatos")
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload[0]["blockchain_index"] == 0
+
+
+def test_ensure_candidate_indices_updates_persisted_records(client):
+    with client.application.app_context():
+        election = Eleicao(
+            titulo="Índices",
+            descricao="Verificação de coerência",
+            data_inicio=_utc_now(),
+            data_fim=_utc_now(),
+            ativa=False,
+        )
+        db.session.add(election)
+        db.session.flush()
+
+        candidate = Candidato(
+            nome="SemIndice",
+            eleicao_id=election.id,
+            blockchain_index=5,
+        )
+        db.session.add(candidate)
+        db.session.commit()
+
+        mapping = ensure_candidate_indices(election.id)
+        assert mapping[candidate.id] == 0
+        assert validate_candidate_indices(election.id) is True
 
 
 def test_list_candidates_returns_empty_for_election_without_candidates(client, monkeypatch):
@@ -179,6 +224,7 @@ def test_update_candidate_changes_name(client, monkeypatch):
     assert response.status_code == 200
     assert response.json["nome"] == "Alice Updated"
     assert response.json["id"] == candidate["id"]
+    assert response.json["blockchain_index"] == 0
 
 
 def test_update_candidate_accepts_empty_payload(client, monkeypatch):
@@ -190,6 +236,7 @@ def test_update_candidate_accepts_empty_payload(client, monkeypatch):
     
     assert response.status_code == 200
     assert response.json["nome"] == "Alice"
+    assert response.json["blockchain_index"] == 0
 
 
 def test_update_candidate_rejects_empty_name(client, monkeypatch):

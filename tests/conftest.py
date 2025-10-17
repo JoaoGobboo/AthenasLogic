@@ -39,5 +39,6 @@ def client():
             db.session.execute(table.delete())
         db.session.commit()
         app.extensions.pop("nonce_store", None)
+        app.extensions.pop("session_store", None)
     with app.test_client() as test_client:
         yield test_client

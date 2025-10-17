@@ -18,6 +18,8 @@ from routes.health import health_bp
 # <<< NOVAS IMPORTAÇÕES DE ROTAS AQUI >>>
 from routes.audit import audit_bp
 from routes.blockchain import blockchain_bp
+from routes.users import users_bp
+from routes.votes import votes_bp
 
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -75,6 +77,8 @@ def create_app() -> Flask:
     app.register_blueprint(auth_bp)
     app.register_blueprint(elections_bp)
     app.register_blueprint(candidates_bp)
+    app.register_blueprint(users_bp)
+    app.register_blueprint(votes_bp)
 
     @app.errorhandler(HTTPException)
     def handle_http_exception(exc: HTTPException):

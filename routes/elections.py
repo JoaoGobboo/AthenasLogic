@@ -2,6 +2,7 @@ from flask import Blueprint, abort, jsonify, request
 from pydantic import ValidationError
 
 from dtos.election_dto import CreateElectionDTO, UpdateElectionDTO
+from dtos.vote_dto import CastVoteDTO
 from services.election_service import (
     create_election,
     delete_election,
@@ -11,6 +12,12 @@ from services.election_service import (
     serialize_election,
     start_election,
     update_election,
+)
+
+from services.vote_service import (
+    get_election_results,
+    get_election_status,
+    register_vote,
 )
 
 
@@ -288,3 +295,26 @@ def end(election_id: int) -> tuple:
     """
     election = end_election(election_id)
     return jsonify(election), 200
+
+
+@elections_bp.route("/api/eleicoes/<int:election_id>/votar", methods=["POST"])
+def cast_vote(election_id: int) -> tuple:
+    payload = request.get_json(silent=True) or {}
+    try:
+        dto = CastVoteDTO(**payload)
+    except ValidationError as exc:
+        return jsonify({"error": _format_validation_error(exc)}), 400
+    vote = register_vote(election_id, dto)
+    return jsonify(vote), 201
+
+
+@elections_bp.route("/api/eleicoes/<int:election_id>/resultados", methods=["GET"])
+def election_results(election_id: int) -> tuple:
+    results = get_election_results(election_id)
+    return jsonify(results), 200
+
+
+@elections_bp.route("/api/eleicoes/<int:election_id>/status", methods=["GET"])
+def election_status(election_id: int) -> tuple:
+    status = get_election_status(election_id)
+    return jsonify(status), 200

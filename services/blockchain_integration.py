@@ -138,6 +138,16 @@ def close_election_onchain() -> Optional[TxReceipt]:
 
     return _send_transaction(builder)
 
+def record_vote_onchain(candidate_index: int) -> Optional[TxReceipt]:
+    if not is_blockchain_enabled():
+        return None
+
+    def builder(contract: Contract):
+        return contract.functions.vote(int(candidate_index))
+
+    return _send_transaction(builder)
+
+
 def add_candidate_onchain(name: str) -> Optional[TxReceipt]:
     if not is_blockchain_enabled():
         return None
